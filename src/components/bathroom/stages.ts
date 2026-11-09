@@ -19,7 +19,7 @@ export const STAGES: Stage[] = [
   {
     short: "Podklad",
     title: "Příprava podkladu",
-    text: "Laserem a latí zkontrolujeme rovinnost stěn i podlahy, nerovnosti přebrousíme a celý podklad napenetrujeme.",
+    text: "Laserem a vodováhou zkontrolujeme rovinnost stěn i podlahy, nerovnosti přebrousíme a celý podklad napenetrujeme.",
     details: ["Kontrola rovinnosti", "Přebroušení", "Penetrace"],
     seconds: 7,
   },
@@ -54,7 +54,7 @@ export const STAGES: Stage[] = [
   {
     short: "Obklad",
     title: "Obklad velkoformátem",
-    text: "Světlé desky 60 × 120 lepíme stejnou metodou. Kresba pokračuje do niky s poličkami z obkladu i na dvířka skryté skříňky nad WC.",
+    text: "Velkoformátové desky lepíme stejnou metodou. V ukázce jsou 120 × 60 cm, podle výběru zákazníka až do formátu 160 × 320 cm. Kresba pokračuje do niky s poličkami z obkladu i na dvířka skryté skříňky nad WC.",
     details: [],
     seconds: 7.5,
   },
@@ -68,7 +68,7 @@ export const STAGES: Stage[] = [
   {
     short: "Spárování",
     title: "Spárování",
-    text: "Spáry vyplníme gumovým hladítkem. Vyberte si cementovou spárovačku, nebo epoxidovou, která nenasákává a odolá skvrnám.",
+    text: "Spáry podle spárořezu (v ukázce 1,5 mm) vyplníme gumovým hladítkem. Vyberte si cementovou spárovačku, nebo epoxidovou, která nenasákává a odolá skvrnám.",
     details: [],
     seconds: 6.5,
   },
@@ -89,8 +89,8 @@ export const STAGES: Stage[] = [
   {
     short: "Předání",
     title: "Předání klientovi",
-    text: "Osadíme sprchu, zástěnu, vanu a WC a koupelnu předáme s předávacím protokolem a zárukou. Teď si ji můžete prohlédnout sami.",
-    details: ["Předávací protokol", "Záruka", "Čistá koupelna"],
+    text: "Osadíme sprchu, zástěnu, vanu a WC a koupelnu předáme se předávacím protokolem. Teď si ji můžete prohlédnout sami.",
+    details: ["Předávací protokol", "Čistá koupelna"],
     seconds: 7,
   },
 ];
@@ -217,12 +217,12 @@ export const LABELS: SceneLabel[] = [
   { id: "wpFloor", text: "Hydroizolace podlahy", from: 3.12, to: 3.98, pos: [2.2, 0.01, 1.7] },
   { id: "bed", text: "Lepidlo na podklad", from: 4.08, to: 4.55, pos: [1.7, 0.01, 2.45] },
   { id: "butter", text: "Lepidlo na dlaždici", from: 4.18, to: 4.5, pos: [1.9, 0.42, 2.4] },
-  { id: "format", text: "Velkoformát 60 × 120", from: 5.3, to: 5.98, pos: [2.6, 1.9, 0.02] },
+  { id: "format", text: "Velkoformát (ukázka 120 × 60 cm)", from: 5.3, to: 5.98, pos: [2.6, 1.9, 0.02] },
   { id: "niche", text: "Polička z obkladu", from: 5.62, to: 5.98, pos: [0.7, 1.3, 0.0] },
   { id: "cabinet", text: "Skrytá skříňka", from: 5.7, to: 5.98, pos: [0.26, 2.15, 2.32] },
   { id: "trim", text: "Ukončovací lišta", from: 6.12, to: 6.48, pos: [0.258, 1.5, 1.732] },
   { id: "jolly", text: "Jolly roh 45° + epoxid", from: 6.56, to: 6.98, pos: [0.258, 1.5, 1.732] },
-  { id: "grout", text: "Spára 2 mm", from: 7.3, to: 7.98, pos: [1.2, 0.9, 0.02] },
+  { id: "grout", text: "Spára 1,5 mm (podle spárořezu)", from: 7.3, to: 7.98, pos: [1.2, 0.9, 0.02] },
   { id: "silicone", text: "Silikon v koutech", from: 8.35, to: 8.98, pos: [0.02, 0.9, 0.02] },
   { id: "btn-narrow", text: "Hranatá úzká", from: 9.12, to: 9.36, pos: [0.258, 1.12, 2.3] },
   { id: "btn-wide", text: "Hranatá široká", from: 9.4, to: 9.64, pos: [0.258, 1.12, 2.3] },
