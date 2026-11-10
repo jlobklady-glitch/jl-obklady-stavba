@@ -281,7 +281,7 @@ export interface Hotspot {
 /** Clickable points shown after the build is finished; each explains one step. */
 export const HOTSPOTS: Hotspot[] = [
   { stage: 0, pos: [2.3, 1.7, 0.02] },
-  { stage: 1, pos: [0.95, 0.03, 0.07] },
+  { stage: 1, pos: [0.8, 0.03, 0.4] },
   { stage: 2, pos: [0.02, 1.85, 0.02] },
   { stage: 3, pos: [0.02, 1.4, 0.95] },
   { stage: 4, pos: [1.9, 0.02, 2.0] },
@@ -290,10 +290,10 @@ export const HOTSPOTS: Hotspot[] = [
   { stage: 7, pos: [2.25, 1.1, 0.02] },
   { stage: 8, pos: [2.2, 0.4, 0.02] },
   { stage: 9, pos: [0.258, 1.02, 2.3] },
-  { stage: 10, pos: [0.78, 1.0, 3.1] },
+  { stage: 10, pos: [0.78, 0.89, 3.0] },
   { stage: 11, pos: [0.26, 2.15, 2.32] },
-  { stage: 12, pos: [0.26, 0.55, 1.9] },
-  { stage: 13, pos: [0.018, 2.4, 0.6] },
+  { stage: 12, pos: [0.26, 0.3, 1.9] },
+  { stage: 13, pos: [0.018, 2.4, 1.0] },
 ];
 
 /** Order in which the flush-button shapes are shown during the button step. */
