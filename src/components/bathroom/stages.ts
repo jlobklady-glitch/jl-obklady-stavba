@@ -3,7 +3,7 @@
 export type GroutType = "cement" | "epoxy";
 export type WaterproofType = "A" | "B";
 export type CornerType = "trim" | "jolly";
-export type ButtonType = "narrow" | "wide" | "round";
+export type ButtonType = "narrow" | "wide" | "round" | "nested";
 export type NicheType = "standard" | "large" | "full";
 
 export interface Stage {
@@ -31,24 +31,24 @@ export const STAGES: Stage[] = [
     seconds: 6.5,
   },
   {
-    short: "Pásky",
-    title: "Hydroizolace: rohy a prostupy",
-    text: "Nejslabší místa zesílíme jako první. Do rohů a styků stěny s podlahou vlepíme těsnicí pásky, na vývody manžety a kolem žlabu límec.",
-    details: ["Pásky v rozích", "Manžety na prostupy", "Límec kolem žlabu"],
-    seconds: 6.5,
+    short: "1. vrstva",
+    title: "Hydroizolace: 1. vrstva a pásky",
+    text: "Na stěny a do niky naneseme první vrstvu stěrkové hydroizolace, na podlahu cementovou s vláknem. Do ní ještě za mokra vložíme pásky do rohů, manžety na prostupy a límec kolem žlabu.",
+    details: ["1. vrstva hydroizolace", "Pásky vložené do vrstvy", "Manžety na prostupy", "Límec kolem žlabu"],
+    seconds: 7.5,
   },
   {
-    short: "Hydroizolace",
-    title: "Hydroizolace podlahy a stěn",
-    text: "Podle koupelny volíme ze dvou systémů. Oba s pásky v rozích tvoří souvislou vodotěsnou vrstvu.",
+    short: "2. vrstva",
+    title: "Hydroizolace: 2. vrstva",
+    text: "Druhá vrstva pásky i manžety úplně překryje. Vyberte si provedení:",
     details: [],
-    seconds: 8,
+    seconds: 8.5,
   },
   {
     short: "Dlažba",
     title: "Pokládka dlažby metodou butterfly",
-    text: "Lepidlo naneseme zubovou stěrkou na podklad i na rub dlaždice. Velký formát tak leží v plném lůžku, bez dutin.",
-    details: ["Lepidlo na podklad", "Lepidlo na dlaždici", "Spáry navazují na stěny"],
+    text: "Vanu usadíme až na hotovou hydroizolaci. Pak lepidlo naneseme zubovou stěrkou na podklad i na rub dlaždice. Velký formát tak leží v plném lůžku, bez dutin.",
+    details: ["Vana až na hotovou hydroizolaci", "Lepidlo na podklad", "Lepidlo na dlaždici", "Spáry navazují na stěny"],
     seconds: 6.5,
   },
   {
@@ -82,14 +82,42 @@ export const STAGES: Stage[] = [
   {
     short: "Tlačítko WC",
     title: "Tlačítko WC z obkladu",
-    text: "Z obkladu vyřežeme jen samotná tlačítka, ne celý modul. Kresba kamene na nich plynule pokračuje. Hranatá úzká, široká, nebo kulatá prořezaná do sebe.",
+    text: "Z obkladu vyřežeme jen samotná tlačítka, ne celý modul. Kresba kamene na nich plynule pokračuje. Hranatá úzká, hranatá široká, kulatá vedle sebe, nebo kulatá prořezaná do sebe.",
     details: [],
-    seconds: 13,
+    seconds: 15,
+  },
+  {
+    short: "Umyvadlo",
+    title: "Metrové umyvadlo, skříňka a dávkovač z obkladu",
+    text: "Metrové umyvadlo vyrobíme ze stejného velkoformátu. Dno spádujeme ke skrytému odtoku pod vyjímatelným proužkem obkladu. Pod umyvadlem je obložená skříňka se šuplíky, které se při otevření rozsvítí.",
+    details: ["Délka 1 m", "Skrytý odtok pod proužkem", "Podsvícené šuplíky", "Dávkovač z obkladu"],
+    seconds: 10,
+  },
+  {
+    short: "Skříňka",
+    title: "Skrytá skříňka z obkladu",
+    text: "Nad podsvícenou nikou u WC otevřeme skrytou skříňku. Dvířka bez úchytek mají stejnou kresbu i spáry jako okolní stěna.",
+    details: ["Bez úchytek", "Navazující kresba", "Skrytý úložný prostor"],
+    seconds: 9,
+  },
+  {
+    short: "Papír a štětka",
+    title: "Skrytý papír a WC štětka",
+    text: "Napravo od záchodu ukážeme skrytý modul: dole skříňka na WC štětku, nad ní zásobník papíru. Umyvadlo zůstává volné a nic neruší obklad.",
+    details: ["Napravo od WC", "Štětka dole", "Papír nad štětkou"],
+    seconds: 10,
+  },
+  {
+    short: "Odtah",
+    title: "Skrytý odtah vlhkosti",
+    text: "U sprchového koutu pod stropem je odtah zakrytý obkladem 10 × 10 cm. Centimetrová mezera po obvodu odvádí vlhkost bez viditelné mřížky.",
+    details: ["U sprchy", "Obklad 10 × 10 cm", "Mezera 1 cm"],
+    seconds: 8,
   },
   {
     short: "Předání",
     title: "Předání klientovi",
-    text: "Osadíme sprchu, zástěnu, vanu a WC a koupelnu předáme se předávacím protokolem. Teď si ji můžete prohlédnout sami.",
+    text: "Osadíme sprchu, WC a umyvadlo s dávkovačem ze stejného obkladu. Vana stojí na svém místě už od hydroizolace, papír, štětka, odtah i revize zůstanou nenápadně skryté. Koupelnu předáme s předávacím protokolem.",
     details: ["Předávací protokol", "Čistá koupelna"],
     seconds: 7,
   },
@@ -140,8 +168,15 @@ export const STAGE_INDEX = {
   grout: 7,
   clean: 8,
   button: 9,
-  handover: 10,
+  basin: 10,
+  cabinet: 11,
+  accessories: 12,
+  vent: 13,
+  handover: 14,
 } as const;
+
+export const TUB_INSTALL = { from: 4.0, to: 4.18 } as const;
+export const TUB_ENCLOSURE = { from: 4.18, to: 4.38 } as const;
 
 export const GROUT_INFO: Record<GroutType, { name: string; details: string[] }> = {
   cement: {
@@ -156,14 +191,14 @@ export const GROUT_INFO: Record<GroutType, { name: string; details: string[] }> 
 
 export const WATERPROOF_INFO: Record<WaterproofType, { name: string; long: string; details: string[] }> = {
   A: {
-    name: "A · Stěrková",
-    long: "Stěny a niky natřeme stěrkovou hydroizolací ve dvou vrstvách, podlahu cementovou hydroizolací vyztuženou vláknem.",
-    details: ["Stěny a niky: stěrka 2×", "Podlaha: cementová s vláknem", "Pásky zapracované uvnitř"],
+    name: "A · Stěrka 2×",
+    long: "Stěny a niky přetřeme druhou vrstvou stěrky, podlahu druhou vrstvou cementové hydroizolace s vláknem. Pásky a manžety zůstanou uvnitř izolace.",
+    details: ["Stěny a niky: 2. vrstva stěrky", "Podlaha: cementová s vláknem", "Pásky uvnitř izolace"],
   },
   B: {
-    name: "B · Textilie",
-    long: "Celou koupelnu, stěny i podlahu, pokryjeme netkanou vodotěsnou textilií v pásech širokých 1 m. Každý spoj se překrývá a přebandážuje.",
-    details: ["Pásy šíře 1 m", "Přesahy přebandážované", "Stěny i podlaha"],
+    name: "B · Fólie WP 200",
+    long: "Na první vrstvu položíme na podlahu i stěny fólii (např. Mapeguard WP 200) v pásech širokých 1 m. Každý spoj přebandážujeme páskou se speciálním lepidlem.",
+    details: ["Fólie v pásech 1 m", "Spoje přebandážované páskou", "Speciální lepidlo", "Podlaha i stěny"],
   },
 };
 
@@ -181,9 +216,10 @@ export const CORNER_INFO: Record<CornerType, { name: string; long: string; detai
 };
 
 export const BUTTON_INFO: Record<ButtonType, { name: string }> = {
-  narrow: { name: "Hranatá úzká" },
+  narrow: { name: "Úzká vodorovná" },
   wide: { name: "Hranatá široká" },
-  round: { name: "Kulatá do sebe" },
+  round: { name: "Kulatá vedle sebe" },
+  nested: { name: "Kulatá do sebe" },
 };
 
 export const NICHE_INFO: Record<NicheType, { name: string }> = {
@@ -199,6 +235,8 @@ export interface SceneLabel {
   text: string;
   /** Visible while the timeline (in stage units) is inside this window. */
   from: number;
+  /** Shown only for this waterproofing variant. */
+  variant?: WaterproofType;
   to: number;
   pos: [number, number, number];
 }
@@ -211,10 +249,14 @@ export const LABELS: SceneLabel[] = [
   { id: "primer", text: "Penetrace", from: 0.62, to: 0.98, pos: [2.4, 1.6, 0.01] },
   { id: "drain", text: "Odtokový žlab", from: 1.2, to: 1.98, pos: [0.95, 0.02, 0.07] },
   { id: "slope", text: "Spád ke žlabu", from: 1.55, to: 1.98, pos: [0.7, 0.0, 0.85] },
-  { id: "tape", text: "Těsnicí páska v rohu", from: 2.25, to: 2.98, pos: [0.03, 1.6, 0.03] },
-  { id: "sleeve", text: "Manžeta na vývod", from: 2.6, to: 2.98, pos: [0.01, 1.05, 0.6] },
-  { id: "wpWall", text: "Hydroizolace stěn", from: 3.25, to: 3.98, pos: [0.3, 1.95, 0.01] },
-  { id: "wpFloor", text: "Hydroizolace podlahy", from: 3.12, to: 3.98, pos: [2.2, 0.01, 1.7] },
+  { id: "wp1", text: "1. vrstva hydroizolace", from: 2.06, to: 2.42, pos: [0.3, 1.95, 0.01] },
+  { id: "tape", text: "Páska vložená do 1. vrstvy", from: 2.45, to: 2.98, pos: [0.03, 1.6, 0.03] },
+  { id: "sleeve", text: "Manžeta v 1. vrstvě", from: 2.7, to: 2.98, pos: [0.01, 1.05, 0.6] },
+  { id: "wpWall", text: "2. vrstva stěrky", from: 3.2, to: 3.98, pos: [0.3, 1.95, 0.01], variant: "A" },
+  { id: "wpFloor", text: "Cementová s vláknem", from: 3.1, to: 3.98, pos: [2.2, 0.01, 1.7], variant: "A" },
+  { id: "wpSheet", text: "Fólie WP 200 · pás 1 m", from: 3.15, to: 3.98, pos: [2.2, 0.01, 1.7], variant: "B" },
+  { id: "wpBand", text: "Přebandážovaný spoj", from: 3.55, to: 3.98, pos: [0.0, 1.5, 0.9], variant: "B" },
+  { id: "tub", text: "Vana až na hotovou hydroizolaci", from: 3.9, to: 4.3, pos: [2.3, 0.3, 0.81] },
   { id: "bed", text: "Lepidlo na podklad", from: 4.08, to: 4.55, pos: [1.7, 0.01, 2.45] },
   { id: "butter", text: "Lepidlo na dlaždici", from: 4.18, to: 4.5, pos: [1.9, 0.42, 2.4] },
   { id: "format", text: "Velkoformát (ukázka 120 × 60 cm)", from: 5.3, to: 5.98, pos: [2.6, 1.9, 0.02] },
@@ -224,10 +266,10 @@ export const LABELS: SceneLabel[] = [
   { id: "jolly", text: "Jolly roh 45° + epoxid", from: 6.56, to: 6.98, pos: [0.258, 1.5, 1.732] },
   { id: "grout", text: "Spára 1,5 mm (podle spárořezu)", from: 7.3, to: 7.98, pos: [1.2, 0.9, 0.02] },
   { id: "silicone", text: "Silikon v koutech", from: 8.35, to: 8.98, pos: [0.02, 0.9, 0.02] },
-  { id: "btn-narrow", text: "Hranatá úzká", from: 9.12, to: 9.36, pos: [0.258, 1.12, 2.3] },
-  { id: "btn-wide", text: "Hranatá široká", from: 9.4, to: 9.64, pos: [0.258, 1.12, 2.3] },
-  { id: "btn-round", text: "Kulatá, prořezaná do sebe", from: 9.68, to: 9.9, pos: [0.258, 1.12, 2.3] },
-  { id: "tub", text: "Vana obložená obkladem", from: 10.4, to: 10.95, pos: [2.3, 0.3, 0.81] },
+  { id: "btn-narrow", text: "Hranatá úzká, vodorovně", from: 9.06, to: 9.22, pos: [0.258, 1.12, 2.3] },
+  { id: "btn-wide", text: "Hranatá široká", from: 9.26, to: 9.43, pos: [0.258, 1.12, 2.3] },
+  { id: "btn-round", text: "Kulatá vedle sebe", from: 9.47, to: 9.63, pos: [0.258, 1.12, 2.3] },
+  { id: "btn-nested", text: "Kulatá prořezaná do sebe", from: 9.67, to: 9.85, pos: [0.258, 1.12, 2.3] },
   { id: "wcniche", text: "Podsvícená nika nad WC", from: 10.45, to: 10.95, pos: [0.2, 1.45, 2.32] },
 ];
 
@@ -248,4 +290,22 @@ export const HOTSPOTS: Hotspot[] = [
   { stage: 7, pos: [2.0, 1.2, 0.02] },
   { stage: 8, pos: [2.2, 0.6, 0.02] },
   { stage: 9, pos: [0.258, 1.02, 2.3] },
+  { stage: 10, pos: [0.78, 0.89, 3.35] },
+  { stage: 11, pos: [0.26, 2.15, 2.32] },
+  { stage: 12, pos: [0.26, 0.72, 1.9] },
+  { stage: 13, pos: [0.018, 2.4, 0.6] },
 ];
+
+/** Order in which the flush-button shapes are shown during the button step. */
+export const BUTTON_ORDER: ButtonType[] = ["narrow", "wide", "round", "nested"];
+/** Window boundaries (in stage units) for each shape in BUTTON_ORDER; the camera zooms out after the last. */
+export const BUTTON_SPLITS = [9.0, 9.24, 9.45, 9.65, 10] as const;
+
+/** Which flush button is visible at timeline `s`; `chosen` overrides the automatic cycling. */
+export function buttonAtStage(s: number, chosen: ButtonType | null): ButtonType {
+  if (chosen) return chosen;
+  if (s >= BUTTON_SPLITS[0] && s < BUTTON_SPLITS[4]) {
+    for (let i = 0; i < BUTTON_ORDER.length; i++) if (s < BUTTON_SPLITS[i + 1]!) return BUTTON_ORDER[i]!;
+  }
+  return "nested";
+}

@@ -1,9 +1,25 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
-import { Check, ChevronLeft, ChevronRight, Maximize2, Pause, Play, Rotate3d } from "lucide-react";
+import {
+  Bath,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Lightbulb,
+  LightbulbOff,
+  Maximize2,
+  Pause,
+  Play,
+  Rotate3d,
+  ShowerHead,
+  Droplets,
+  Sparkles,
+  X,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import {
   BUTTON_INFO,
+  BUTTON_ORDER,
   CORNER_INFO,
   GROUT_INFO,
   HOTSPOTS,
@@ -11,8 +27,11 @@ import {
   NICHE_INFO,
   STAGES,
   STAGE_COUNT,
+  STAGE_INDEX,
   WALLS_DETAILS,
   WATERPROOF_INFO,
+  buttonAtStage,
+  progressToStage,
   type ButtonType,
   type CornerType,
   type GroutType,
@@ -20,6 +39,10 @@ import {
   type WaterproofType,
 } from "./stages";
 import type { BathroomScene } from "./scene";
+import { FINISH_DETAILS } from "./details";
+import { Button } from "@/components/ui/button";
+
+const INSPECTION_POINTS = [...HOTSPOTS, ...FINISH_DETAILS.map((d, i) => ({ stage: STAGE_COUNT + i, pos: [...d.pos] as [number, number, number] }))];
 
 export interface BathroomViewerHandle {
   seekStage: (index: number) => void;
@@ -32,57 +55,70 @@ interface Props {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** Small segmented control used for the per-step options. */
-function Seg<T extends string>({
+function Segmented<T extends string>({
   label,
-  value,
   options,
+  value,
   onChange,
+  cols,
 }: {
   label: string;
+  options: { value: T; label: string }[];
   value: T | null;
-  options: { id: T; name: string }[];
   onChange: (v: T) => void;
+  cols?: number;
 }) {
   return (
     <div
       className="mt-3 grid gap-px border border-joint bg-joint"
-      style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+      style={{ gridTemplateColumns: `repeat(${cols ?? options.length}, minmax(0, 1fr))` }}
       role="radiogroup"
       aria-label={label}
     >
       {options.map((o) => (
         <button
-          key={o.id}
+          key={o.value}
           type="button"
           role="radio"
-          aria-checked={value === o.id}
-          onClick={() => onChange(o.id)}
+          aria-checked={value === o.value}
+          onClick={() => onChange(o.value)}
           className={cn(
-            "px-2 py-2 text-[13px] font-semibold leading-tight transition-colors md:text-sm",
-            value === o.id ? "bg-brass text-primary-foreground" : "bg-slab text-stone hover:text-foreground",
+            "px-2 py-2 text-xs font-semibold leading-tight transition-colors md:text-sm",
+            value === o.value ? "bg-brass text-primary-foreground" : "bg-slab text-stone hover:text-foreground",
           )}
         >
-          {o.name}
+          {o.label}
         </button>
       ))}
     </div>
   );
 }
 
-function Toggle({ on, label, onClick }: { on: boolean; label: string; onClick: () => void }) {
+function Toggle({
+  on,
+  onClick,
+  icon: Icon,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  icon: typeof Lightbulb;
+  children: string;
+}) {
   return (
-    <button
+    <Button
+      variant="ghost"
       type="button"
       aria-pressed={on}
       onClick={onClick}
       className={cn(
-        "border px-2.5 py-1 text-xs font-medium transition-colors",
-        on ? "border-brass bg-brass text-primary-foreground" : "border-joint bg-slab/70 text-stone hover:text-foreground",
+        "flex items-center justify-center gap-2 border px-2 py-2.5 text-xs font-semibold transition-colors md:text-sm",
+        on ? "border-brass bg-brass text-primary-foreground" : "border-joint bg-slab text-stone hover:text-foreground",
       )}
     >
-      {label}
-    </button>
+      <Icon className="size-4 shrink-0" />
+      <span className="truncate">{children}</span>
+    </Button>
   );
 }
 
@@ -93,35 +129,42 @@ export function BathroomViewer({ ref, className }: Props) {
   const fillRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const rangeRef = useRef<HTMLInputElement>(null);
   const labelRefs = useRef(new Map<string, HTMLElement>());
-  const stageRef = useRef(0);
-
   const hotspotRefs = useRef(new Map<number, HTMLElement>());
+  const stageRef = useRef(0);
   const progressRef = useRef(0);
+  const playingRef = useRef(false);
+  const autoRef = useRef({ corner: "trim" as CornerType, button: "narrow" as ButtonType, finished: false });
 
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [stage, setStage] = useState(0);
+  const [finished, setFinished] = useState(false);
+  const [freeView, setFreeView] = useState(false);
+  const [autoCorner, setAutoCorner] = useState<CornerType>("trim");
+  const [autoButton, setAutoButton] = useState<ButtonType>("narrow");
+
   const [grout, setGrout] = useState<GroutType>("cement");
   const [waterproof, setWaterproof] = useState<WaterproofType>("A");
   const [corner, setCorner] = useState<CornerType | null>(null);
   const [button, setButton] = useState<ButtonType | null>(null);
   const [niche, setNiche] = useState<NicheType>("standard");
-  const [nicheLight, setNicheLight] = useState(true);
+  const [nicheLit, setNicheLit] = useState(true);
   const [mood, setMood] = useState(false);
+  const [roomLit, setRoomLit] = useState(true);
   const [shower, setShower] = useState(false);
   const [tub, setTub] = useState(false);
-  const [freeView, setFreeView] = useState(false);
-  const [info, setInfo] = useState<number | null>(null);
+  const [focus, setFocus] = useState<number | null>(null);
 
-  // Keep the latest choices in a ref so a rebuilt scene (new niche) gets them re-applied.
-  const optsRef = useRef({ grout, waterproof, corner, button, nicheLight, mood, shower, tub });
-  optsRef.current = { grout, waterproof, corner, button, nicheLight, mood, shower, tub };
+  // latest option values, re-applied when the scene is rebuilt (niche change)
+  const optsRef = useRef({ grout, waterproof, corner, button, nicheLit, mood, roomLit, shower, tub, focus });
+  optsRef.current = { grout, waterproof, corner, button, nicheLit, mood, roomLit, shower, tub, focus };
 
   useEffect(() => {
     let disposed = false;
     let api: BathroomScene | null = null;
-    setReady(false);
+    const resume = progressRef.current;
+    const wasPlaying = playingRef.current;
     import("./scene")
       .then(({ createBathroomScene }) => {
         if (disposed || !containerRef.current || !canvasRef.current) return;
@@ -131,14 +174,32 @@ export function BathroomViewer({ ref, className }: Props) {
             canvasRef.current,
             {
               onReady: () => setReady(true),
-              onPlayingChange: setPlaying,
+              onPlayingChange: (v) => {
+                playingRef.current = v;
+                setPlaying(v);
+              },
               onFrame: (p) => {
                 progressRef.current = p;
-                const s = p * STAGE_COUNT;
+                const s = progressToStage(p);
                 const idx = Math.min(STAGE_COUNT - 1, Math.floor(s));
                 if (idx !== stageRef.current) {
                   stageRef.current = idx;
                   setStage(idx);
+                }
+                const fin = p >= 1;
+                if (fin !== autoRef.current.finished) {
+                  autoRef.current.finished = fin;
+                  setFinished(fin);
+                }
+                const c: CornerType = s < 6.5 ? "trim" : "jolly";
+                if (c !== autoRef.current.corner) {
+                  autoRef.current.corner = c;
+                  setAutoCorner(c);
+                }
+                const b = buttonAtStage(s, null);
+                if (b !== autoRef.current.button) {
+                  autoRef.current.button = b;
+                  setAutoButton(b);
                 }
                 fillRefs.current.forEach((el, i) => {
                   if (el) el.style.transform = `scaleX(${Math.min(1, Math.max(0, s - i))})`;
@@ -154,13 +215,18 @@ export function BathroomViewer({ ref, className }: Props) {
           api.setWaterproof(o.waterproof);
           api.setCorner(o.corner);
           api.setButton(o.button);
-          api.setNicheLight(o.nicheLight);
+          api.setNicheLight(o.nicheLit);
           api.setMood(o.mood);
+          api.setRoomLight(o.roomLit);
           api.setShower(o.shower);
           api.setTub(o.tub);
           api.setLabelElements(labelRefs.current);
           api.setHotspotElements(hotspotRefs.current);
-          if (progressRef.current > 0) api.seek(progressRef.current);
+          if (resume > 0) {
+            api.seek(resume);
+            if (resume >= 1) api.focus(o.focus);
+            else if (wasPlaying) api.play();
+          }
           sceneRef.current = api;
         } catch (e) {
           console.error(e);
@@ -179,47 +245,18 @@ export function BathroomViewer({ ref, className }: Props) {
   }, [niche]);
 
   const seekStage = useCallback((i: number) => {
-    setInfo(null);
     setFreeView(false);
+    setFocus(null);
     sceneRef.current?.setFreeView(false);
     sceneRef.current?.seekStage(i);
   }, []);
 
   useImperativeHandle(ref, () => ({ seekStage }), [seekStage]);
 
-  const chooseGrout = (g: GroutType) => {
-    setGrout(g);
-    sceneRef.current?.setGrout(g);
-  };
-  const chooseWaterproof = (w: WaterproofType) => {
-    setWaterproof(w);
-    sceneRef.current?.setWaterproof(w);
-  };
-  const chooseCorner = (c: CornerType) => {
-    setCorner(c);
-    sceneRef.current?.setCorner(c);
-  };
-  const chooseButton = (b: ButtonType) => {
-    setButton(b);
-    sceneRef.current?.setButton(b);
-  };
-  const flip = (cur: boolean, set: (v: boolean) => void, apply: (on: boolean) => void) => {
-    set(!cur);
-    apply(!cur);
-  };
-  const openInfo = (i: number) => {
-    setInfo(i);
-    setFreeView(false);
-    sceneRef.current?.focus(i);
-  };
-  const closeInfo = () => {
-    setInfo(null);
-    sceneRef.current?.focus(null);
-  };
-
   const toggleFree = () => {
     const next = !freeView;
     setFreeView(next);
+    if (next) setFocus(null);
     sceneRef.current?.setFreeView(next);
   };
 
@@ -230,28 +267,114 @@ export function BathroomViewer({ ref, className }: Props) {
     else el.requestFullscreen?.().catch(() => {});
   };
 
-  const shown = info ?? stage;
-  const current = STAGES[shown] ?? STAGES[0]!;
-  const details =
-    shown === 3
-      ? WATERPROOF_INFO[waterproof].details
-      : shown === 5
-        ? WALLS_DETAILS
-        : shown === 6
-          ? corner
-            ? CORNER_INFO[corner].details
-            : current.details
-          : shown === 7
-            ? GROUT_INFO[grout].details
-            : current.details;
-  const longText =
-    shown === 3
-      ? WATERPROOF_INFO[waterproof].long
-      : shown === 6 && corner
-        ? CORNER_INFO[corner].long
-        : current.text;
-  const showOptions = info === null;
-  const finished = stage === STAGE_COUNT - 1;
+  const openFocus = (i: number | null) => {
+    setFocus(i);
+    if (i !== null) setFreeView(false);
+    sceneRef.current?.focus(i);
+  };
+  const stepFocus = (dir: number) => {
+    const list = INSPECTION_POINTS.map((h) => h.stage);
+    const at = focus === null ? -1 : list.indexOf(focus);
+    const next = list[(at + dir + list.length) % list.length]!;
+    openFocus(next);
+  };
+
+  const current = STAGES[stage] ?? STAGES[0]!;
+  const shownCorner = corner ?? autoCorner;
+  const shownButton = button ?? autoButton;
+
+  const detailsFor = (i: number): string[] => {
+    if (i === STAGE_INDEX.waterproof) return WATERPROOF_INFO[waterproof].details;
+    if (i === STAGE_INDEX.walls) return WALLS_DETAILS;
+    if (i === STAGE_INDEX.corner) return CORNER_INFO[shownCorner].details;
+    if (i === STAGE_INDEX.grout) return GROUT_INFO[grout].details;
+    return STAGES[i]?.details ?? [];
+  };
+
+  const optionsFor = (i: number) => {
+    if (i === STAGE_COUNT + 4) return optionsFor(STAGE_INDEX.corner);
+    if (i === STAGE_INDEX.waterproof)
+      return (
+        <>
+          <Segmented
+            label="Provedení 2. vrstvy hydroizolace"
+            value={waterproof}
+            onChange={(v) => {
+              setWaterproof(v);
+              sceneRef.current?.setWaterproof(v);
+            }}
+            options={(Object.keys(WATERPROOF_INFO) as WaterproofType[]).map((k) => ({ value: k, label: WATERPROOF_INFO[k].name }))}
+          />
+          <p className="mt-2 text-xs leading-relaxed text-stone md:text-sm">{WATERPROOF_INFO[waterproof].long}</p>
+        </>
+      );
+    if (i === STAGE_INDEX.walls)
+      return (
+        <>
+          <Segmented
+            label="Typ sprchové niky"
+            value={niche}
+            onChange={setNiche}
+            options={(Object.keys(NICHE_INFO) as NicheType[]).map((k) => ({ value: k, label: NICHE_INFO[k].name }))}
+          />
+          <Segmented
+            label="Podsvícení niky"
+            value={nicheLit ? "on" : "off"}
+            onChange={(v) => {
+              setNicheLit(v === "on");
+              sceneRef.current?.setNicheLight(v === "on");
+            }}
+            options={[
+              { value: "on", label: "Podsvícená" },
+              { value: "off", label: "Bez podsvícení" },
+            ]}
+          />
+        </>
+      );
+    if (i === STAGE_INDEX.corner)
+      return (
+        <>
+          <Segmented
+            label="Ukončení vnějšího rohu"
+            value={shownCorner}
+            onChange={(v) => {
+              setCorner(v);
+              sceneRef.current?.setCorner(v);
+            }}
+            options={(Object.keys(CORNER_INFO) as CornerType[]).map((k) => ({ value: k, label: CORNER_INFO[k].name }))}
+          />
+          <p className="mt-2 text-xs leading-relaxed text-stone md:text-sm">{CORNER_INFO[shownCorner].long}</p>
+        </>
+      );
+    if (i === STAGE_INDEX.grout)
+      return (
+        <Segmented
+          label="Typ spárovací hmoty"
+          value={grout}
+          onChange={(v) => {
+            setGrout(v);
+            sceneRef.current?.setGrout(v);
+          }}
+          options={(Object.keys(GROUT_INFO) as GroutType[]).map((k) => ({ value: k, label: GROUT_INFO[k].name }))}
+        />
+      );
+    if (i === STAGE_INDEX.button)
+      return (
+        <Segmented
+          label="Tvar tlačítek WC"
+          value={shownButton}
+          cols={2}
+          onChange={(v) => {
+            setButton(v);
+            sceneRef.current?.setButton(v);
+          }}
+          options={BUTTON_ORDER.map((k) => ({ value: k, label: BUTTON_INFO[k].name }))}
+        />
+      );
+    return null;
+  };
+
+  const focused = focus !== null ? (STAGES[focus] ?? FINISH_DETAILS[focus - STAGE_COUNT]) : null;
 
   return (
     <div
@@ -265,6 +388,33 @@ export function BathroomViewer({ ref, className }: Props) {
         aria-label="Trojrozměrná animace stavby koupelny krok za krokem"
       />
       <div className="scene-shade pointer-events-none absolute inset-0" />
+      <Button
+        variant="ghost"
+        size="icon"
+        title="Umyvadlo a hotová koupelna"
+        aria-label="Umyvadlo a hotová koupelna"
+        className="absolute right-4 top-4 z-10 border border-joint bg-background/80 text-brass"
+        onClick={() => {
+          sceneRef.current?.seek(1);
+          openFocus(STAGE_COUNT);
+        }}
+      >
+        <Droplets className="size-5" />
+      </Button>
+
+      {finished && (
+        <div className="absolute right-4 top-16 z-10 flex flex-col gap-2">
+          <Button variant="outline" size="icon" aria-label="Světlo v místnosti" title={roomLit ? "Zhasnout místnost" : "Rozsvítit místnost"} aria-pressed={roomLit} className="bg-background/90" onClick={() => { setRoomLit(!roomLit); sceneRef.current?.setRoomLight(!roomLit); }}>
+            {roomLit ? <Lightbulb className="text-brass" /> : <LightbulbOff />}
+          </Button>
+          <Button variant="outline" size="icon" aria-label="Osvětlení obou nik" title={nicheLit ? "Zhasnout niky" : "Rozsvítit niky"} aria-pressed={nicheLit} className="bg-background/90" onClick={() => { setNicheLit(!nicheLit); sceneRef.current?.setNicheLight(!nicheLit); }}>
+            <Sparkles className={cn(nicheLit && "text-brass")} />
+          </Button>
+          <Button variant="outline" size="icon" aria-label="Napouštění vany" title="Napouštění vany" aria-pressed={tub} className="bg-background/90" onClick={() => { setTub(!tub); sceneRef.current?.setTub(!tub); }}>
+            <Bath className={cn(tub && "text-brass")} />
+          </Button>
+        </div>
+      )}
 
       {/* 3D-anchored labels, positioned by the scene every frame */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
@@ -292,6 +442,36 @@ export function BathroomViewer({ ref, className }: Props) {
         ))}
       </div>
 
+      {/* explanation hotspots, shown once the bathroom is finished */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        {INSPECTION_POINTS.map((h) => (
+          <button
+            key={h.stage}
+            type="button"
+            ref={(el) => {
+              if (el) hotspotRefs.current.set(h.stage, el);
+              else hotspotRefs.current.delete(h.stage);
+            }}
+            onClick={() => openFocus(focus === h.stage ? null : h.stage)}
+            aria-label={`Vysvětlit ${h.stage < STAGE_COUNT ? "krok" : "detail"} ${h.stage + 1}: ${(STAGES[h.stage] ?? FINISH_DETAILS[h.stage - STAGE_COUNT])?.title}`}
+            className="absolute left-0 top-0 will-change-transform"
+            style={{ opacity: 0, pointerEvents: "none" }}
+          >
+            <span
+              className={cn(
+                "relative grid size-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border text-xs font-bold tabular-nums transition-colors md:size-9",
+                focus === h.stage
+                  ? "border-brass bg-brass text-primary-foreground"
+                  : "border-brass/70 bg-background/80 text-brass backdrop-blur-sm hover:bg-brass hover:text-primary-foreground",
+              )}
+            >
+              <span className="animate-ping-ring absolute inset-0 rounded-full border border-brass" />
+              {h.stage + 1}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {/* heading */}
       <div className="pointer-events-none absolute left-4 top-4 md:left-8 md:top-7">
         <p className="kicker">3D postup stavby</p>
@@ -311,10 +491,10 @@ export function BathroomViewer({ ref, className }: Props) {
         aria-label="Kroky stavby"
         className="glass-panel absolute right-6 top-1/2 hidden -translate-y-1/2 py-3 pr-2 lg:block"
       >
-        <ol className="relative flex flex-col gap-1 border-l border-joint">
+        <ol className="relative flex flex-col gap-0.5 border-l border-joint">
           {STAGES.map((s, i) => {
-            const active = i === stage;
-            const done = i < stage;
+            const active = !finished && i === stage;
+            const done = finished || i < stage;
             return (
               <li key={s.short}>
                 <button
@@ -322,7 +502,7 @@ export function BathroomViewer({ ref, className }: Props) {
                   onClick={() => seekStage(i)}
                   aria-current={active ? "step" : undefined}
                   className={cn(
-                    "group relative -ml-px flex items-center gap-3 border-l py-1.5 pl-4 pr-2 text-left text-sm transition-colors",
+                    "group relative -ml-px flex items-center gap-3 border-l py-1 pl-4 pr-2 text-left text-sm transition-colors",
                     active
                       ? "border-brass text-foreground"
                       : "border-transparent text-muted-foreground hover:text-stone",
@@ -344,130 +524,154 @@ export function BathroomViewer({ ref, className }: Props) {
         </ol>
       </nav>
 
-      {/* caption */}
+      {/* caption / options / explanation */}
       <section
-        key={shown}
+        key={finished ? `f-${focus ?? "x"}` : stage}
         aria-live="polite"
-        className="animate-caption-in glass-panel absolute inset-x-3 bottom-[76px] p-4 md:inset-x-auto md:bottom-24 md:left-8 md:w-[27rem] md:p-6"
+        className={cn("animate-caption-in glass-panel scrollbar-none absolute inset-x-3 bottom-[76px] overflow-y-auto p-3 md:inset-x-auto md:bottom-24 md:left-8 md:max-h-[calc(100%-12rem)] md:w-[27rem] md:p-6", finished ? "max-h-[30%]" : "max-h-[38%]")}
       >
-        <div className="flex items-baseline justify-between gap-3">
-          <p className="kicker">
-            {info !== null ? "Detail" : "Krok"} {pad(shown + 1)} / {pad(STAGE_COUNT)}
-          </p>
-          <span className="hidden text-xs text-muted-foreground md:inline">{current.short}</span>
-        </div>
-        <h3 className="mt-2 text-xl font-semibold leading-[1.05] text-foreground md:text-[1.9rem]">
-          {current.title}
-        </h3>
-        <p className="mt-2 text-sm leading-relaxed text-stone md:mt-3 md:text-[15px]">{longText}</p>
-
-        {showOptions && stage === 3 && (
-          <Seg<WaterproofType>
-            label="Systém hydroizolace"
-            value={waterproof}
-            onChange={chooseWaterproof}
-            options={(Object.keys(WATERPROOF_INFO) as WaterproofType[]).map((id) => ({ id, name: WATERPROOF_INFO[id].name }))}
-          />
-        )}
-        {showOptions && stage === 5 && (
-          <Seg<NicheType>
-            label="Typ niky"
-            value={niche}
-            onChange={setNiche}
-            options={(Object.keys(NICHE_INFO) as NicheType[]).map((id) => ({ id, name: NICHE_INFO[id].name }))}
-          />
-        )}
-        {showOptions && stage === 6 && (
-          <Seg<CornerType>
-            label="Ukončení rohu"
-            value={corner}
-            onChange={chooseCorner}
-            options={(Object.keys(CORNER_INFO) as CornerType[]).map((id) => ({ id, name: CORNER_INFO[id].name }))}
-          />
-        )}
-        {showOptions && stage === 7 && (
-          <Seg<GroutType>
-            label="Typ spárovací hmoty"
-            value={grout}
-            onChange={chooseGrout}
-            options={(Object.keys(GROUT_INFO) as GroutType[]).map((id) => ({ id, name: GROUT_INFO[id].name }))}
-          />
-        )}
-        {showOptions && stage === 9 && (
-          <Seg<ButtonType>
-            label="Tvar tlačítka WC"
-            value={button}
-            onChange={chooseButton}
-            options={(Object.keys(BUTTON_INFO) as ButtonType[]).map((id) => ({ id, name: BUTTON_INFO[id].name }))}
-          />
-        )}
-        {info !== null && (
-          <button
-            type="button"
-            onClick={closeInfo}
-            className="mt-3 w-full border border-joint bg-slab px-3 py-2 text-sm font-semibold text-stone transition-colors hover:text-foreground"
-          >
-            Zpět na celou koupelnu
-          </button>
-        )}
-
-        <ul className="scrollbar-none -mx-1 mt-3 flex gap-2 overflow-x-auto px-1">
-          {details.map((d) => (
-            <li
-              key={d}
-              className="flex shrink-0 items-center gap-2 border border-joint bg-slab/70 px-2.5 py-1 text-xs text-stone"
+        {finished && focused ? (
+          <>
+            <div className="flex items-center justify-between gap-3">
+              <p className="kicker">
+                {focus !== null && focus >= STAGE_COUNT ? "Detail z obkladu" : `Krok ${pad((focus ?? 0) + 1)} / ${pad(STAGE_COUNT)}`}
+              </p>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => stepFocus(-1)} className="grid size-8 place-items-center text-stone hover:text-brass" aria-label="Předchozí vysvětlení">
+                  <ChevronLeft className="size-4" />
+                </button>
+                <button type="button" onClick={() => stepFocus(1)} className="grid size-8 place-items-center text-stone hover:text-brass" aria-label="Další vysvětlení">
+                  <ChevronRight className="size-4" />
+                </button>
+                <button type="button" onClick={() => openFocus(null)} className="grid size-8 place-items-center text-stone hover:text-brass" aria-label="Zavřít vysvětlení">
+                  <X className="size-4" />
+                </button>
+              </div>
+            </div>
+            <h3 className="mt-2 text-xl font-semibold leading-[1.05] text-foreground md:text-[1.75rem]">{focused.title}</h3>
+            <p className="mt-2 text-sm leading-relaxed text-stone md:text-[15px]">
+              {focused.text}
+            </p>
+            {focus !== null && optionsFor(focus)}
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {(focus === null ? [] : detailsFor(focus)).map((d) => (
+                <li key={d} className="flex items-center gap-2 border border-joint bg-slab/70 px-2.5 py-1 text-xs text-stone">
+                  <span className="size-1.5 bg-brass" />
+                  {d}
+                </li>
+              ))}
+            </ul>
+            {focus !== null && focus < STAGE_COUNT && <button
+              type="button"
+              onClick={() => seekStage(focus)}
+              className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-brass hover:brightness-110"
             >
-              <span className="size-1.5 bg-brass" />
-              {d}
-            </li>
-          ))}
-        </ul>
-
-        {showOptions && finished && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Toggle on={nicheLight} label="Podsvícení niky" onClick={() => flip(nicheLight, setNicheLight, (v) => sceneRef.current?.setNicheLight(v))} />
-            <Toggle on={mood} label="Atmosféra" onClick={() => flip(mood, setMood, (v) => sceneRef.current?.setMood(v))} />
-            <Toggle on={shower} label="Sprcha" onClick={() => flip(shower, setShower, (v) => sceneRef.current?.setShower(v))} />
-            <Toggle on={tub} label="Vana" onClick={() => flip(tub, setTub, (v) => sceneRef.current?.setTub(v))} />
-          </div>
+              <Play className="size-3.5 fill-current" /> Přehrát tento krok
+            </button>}
+          </>
+        ) : finished ? (
+          <>
+            <p className="kicker">Hotovo · předáno</p>
+            <h3 className="mt-2 text-xl font-semibold leading-[1.05] text-foreground md:text-[1.9rem]">Prohlédněte si koupelnu</h3>
+            <p className="mt-2 hidden text-sm leading-relaxed text-stone md:block md:text-[15px]">
+              Klikněte na očíslované body v koupelně a vysvětlíme vám, co se pod obkladem skrývá.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
+              {FINISH_DETAILS.map((d, i) => (
+                <Button key={d.title} variant="ghost" type="button" onClick={() => openFocus(STAGE_COUNT + i)} className="h-auto justify-start whitespace-normal rounded-none border-b border-joint px-0 pb-2 text-left text-xs text-stone hover:text-brass">{d.title}</Button>
+              ))}
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <Toggle
+                on={mood}
+                icon={Sparkles}
+                onClick={() => {
+                  setMood(!mood);
+                  sceneRef.current?.setMood(!mood);
+                }}
+              >
+                Romantika
+              </Toggle>
+              <Toggle
+                on={shower}
+                icon={ShowerHead}
+                onClick={() => {
+                  setShower(!shower);
+                  sceneRef.current?.setShower(!shower);
+                }}
+              >
+                Sprcha
+              </Toggle>
+              <Toggle
+                on={tub}
+                icon={Bath}
+                onClick={() => {
+                  setTub(!tub);
+                  sceneRef.current?.setTub(!tub);
+                }}
+              >
+                Vana
+              </Toggle>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setNicheLit(!nicheLit);
+                sceneRef.current?.setNicheLight(!nicheLit);
+              }}
+              aria-pressed={nicheLit}
+              className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-stone hover:text-brass"
+            >
+              <Lightbulb className={cn("size-3.5", nicheLit && "text-brass")} />
+              Podsvícení obou nik: {nicheLit ? "zapnuto" : "vypnuto"}
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="kicker">
+                Krok {pad(stage + 1)} / {pad(STAGE_COUNT)}
+              </p>
+              <span className="hidden text-xs text-muted-foreground md:inline">{current.short}</span>
+            </div>
+            <h3 className="mt-2 text-xl font-semibold leading-[1.05] text-foreground md:text-[1.9rem]">{current.title}</h3>
+            <p className="mt-2 text-sm leading-relaxed text-stone md:mt-3 md:text-[15px]">{current.text}</p>
+            {optionsFor(stage)}
+            {detailsFor(stage).length > 0 && (
+              <ul className="scrollbar-none -mx-1 mt-3 flex gap-2 overflow-x-auto px-1">
+                {detailsFor(stage).map((d) => (
+                  <li
+                    key={d}
+                    className="flex shrink-0 items-center gap-2 border border-joint bg-slab/70 px-2.5 py-1 text-xs text-stone"
+                  >
+                    <span className="size-1.5 bg-brass" />
+                    {d}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </section>
-
-      {/* clickable hotspots, shown once the build is finished */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        {HOTSPOTS.map((h) => (
-          <button
-            key={h.stage}
-            type="button"
-            ref={(el) => {
-              if (el) hotspotRefs.current.set(h.stage, el);
-              else hotspotRefs.current.delete(h.stage);
-            }}
-            onClick={() => openInfo(h.stage)}
-            aria-label={`Vysvětlení: ${STAGES[h.stage]?.title ?? ""}`}
-            className="absolute left-0 top-0 grid size-8 place-items-center rounded-full border border-foreground bg-background/60 text-lg font-light text-foreground backdrop-blur-sm transition-colors will-change-transform hover:border-brass hover:bg-brass hover:text-primary-foreground"
-            style={{ opacity: 0 }}
-          >
-            +
-          </button>
-        ))}
-      </div>
 
       {/* control bar */}
       <div className="absolute inset-x-0 bottom-0 border-t border-joint bg-background/90 backdrop-blur-md">
         <div className="flex h-16 items-center gap-1 px-2 md:gap-3 md:px-6">
           <button
             type="button"
-            onClick={() => sceneRef.current?.toggle()}
+            onClick={() => {
+              setFocus(null);
+              sceneRef.current?.toggle();
+            }}
             className="flex h-10 shrink-0 items-center gap-2 bg-brass px-3 text-sm font-semibold text-primary-foreground transition hover:brightness-110 md:px-4"
-            aria-label={playing ? "Pozastavit animaci" : "Přehrát animaci"}
+            aria-label={playing ? "Pozastavit animaci" : finished ? "Přehrát znovu" : "Přehrát animaci"}
           >
             {playing ? <Pause className="size-4" /> : <Play className="size-4 fill-current" />}
-            <span className="hidden md:inline">{playing ? "Pozastavit" : "Přehrát"}</span>
+            <span className="hidden md:inline">{playing ? "Pozastavit" : finished ? "Znovu" : "Přehrát"}</span>
           </button>
           <button
             type="button"
-            onClick={() => seekStage(Math.max(0, stage - 1))}
+            onClick={() => seekStage(Math.max(0, finished ? STAGE_COUNT - 1 : stage - 1))}
             className="grid size-10 shrink-0 place-items-center text-stone transition hover:text-brass"
             aria-label="Předchozí krok"
           >
@@ -495,7 +699,10 @@ export function BathroomViewer({ ref, className }: Props) {
               max={1000}
               defaultValue={0}
               aria-label="Průběh stavby"
-              onInput={(e) => sceneRef.current?.seek(Number(e.currentTarget.value) / 1000)}
+              onInput={(e) => {
+                setFocus(null);
+                sceneRef.current?.seek(Number(e.currentTarget.value) / 1000);
+              }}
               className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
             />
           </div>

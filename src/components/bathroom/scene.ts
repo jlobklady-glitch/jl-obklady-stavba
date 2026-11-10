@@ -4,10 +4,16 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import {
+  BUTTON_ORDER,
+  BUTTON_SPLITS,
   HOTSPOTS,
+  buttonAtStage,
   LABELS,
   STAGE_COUNT,
+  STAGE_INDEX,
   TOTAL_SECONDS,
+  TUB_INSTALL,
+  TUB_ENCLOSURE,
   progressToStage,
   stageToProgress,
   type ButtonType,
@@ -16,6 +22,8 @@ import {
   type NicheType,
   type WaterproofType,
 } from "./stages";
+import { concealedDetailState, DETAIL_DIMENSIONS, FINISH_DETAILS } from "./details";
+import { bathFillTarget, gridPieces, nicheLightLevels, TILE_LAYOUT, tileGridOffset } from "./layout";
 import {
   Surface,
   bell,
@@ -62,6 +70,7 @@ export interface BathroomScene {
   setButton(type: ButtonType | null): void;
   setNicheLight(on: boolean): void;
   setMood(on: boolean): void;
+  setRoomLight(on: boolean): void;
   setShower(on: boolean): void;
   setTub(on: boolean): void;
   /** Fly the camera to a step's viewpoint while the finished bathroom stays visible. */
@@ -75,11 +84,11 @@ export interface BathroomScene {
 /* ------------------------------------------------------------------ constants */
 const N = STAGE_COUNT;
 const W = 3.2; // back wall length (x)
-const D = 2.9; // room depth (z)
+const D = DETAIL_DIMENSIONS.roomDepth; // room depth (z)
 const H = 2.6; // wall height (y)
 const T = 0.01; // tile thickness
 const ADH = 0.006; // adhesive bed
-const GAP = 0.0036; // joint width
+const GAP = TILE_LAYOUT.joint; // joint width
 const TEX_M = 2.6; // metres per marble texture repeat
 
 // shower zone (back-left), tub (back-right), WC pre-wall (left wall, front)
@@ -91,9 +100,9 @@ const TUB_TOP = 0.56;
 const PW_X = 0.24; // pre-wall depth
 const PW_Z = 1.75; // pre-wall starts here and runs to the open front (z = D)
 const PW_ZT = PW_Z - ADH - T; // outer face of the pre-wall side tiles
-const WCZ = 2.3; // WC centre
+const WCZ = DETAIL_DIMENSIONS.wcZ; // WC centre
 const WN = { z0: 1.95, z1: 2.7, y0: 1.25, y1: 1.65, x0: 0.1 }; // niche above WC
-const CAB = { z0: 1.95, z1: 2.7, y0: 1.85, y1: 2.45, x0: 0.06 }; // hidden cabinet
+const CAB = { z0: 1.95, z1: 2.7, y0: 1.8, y1: 2.4, x0: 0.06 }; // hidden cabinet: exactly one 60 cm tile row
 const BTN_Y = 1.02;
 
 const NICHES: Record<NicheType, { x0: number; x1: number; y0: number; y1: number; shelves: number[] }> = {
@@ -234,8 +243,11 @@ export function createBathroomScene(
   const sandMat = std({ map: concreteMap, color: "#c9c4bb", roughness: 0.99, transparent: true, opacity: 0.9, depthWrite: false });
   const primerMat = std({ color: "#8d8981", roughness: 0.32, transparent: true, opacity: 0.82, depthWrite: false });
   const screedMat = std({ map: concreteMap, color: "#c9bda8", roughness: 0.97 });
-  const membraneMat = std({ color: "#86aebd", roughness: 0.55 });
-  const cementWpMat = std({ map: fibreMap, color: "#a9adab", roughness: 0.9 });
+  const membrane1Mat = std({ color: "#9cc3d0", roughness: 0.55 });
+  const membrane2Mat = std({ color: "#4f8297", roughness: 0.5 });
+  const cementWpMat = std({ map: fibreMap, color: "#b3b7b5", roughness: 0.9 });
+  const cementWp2Mat = std({ map: fibreMap, color: "#8f9593", roughness: 0.88 });
+  const bandMat = std({ color: "#f2f3f1", roughness: 0.8 });
   const fabricMatA = std({ map: fabricMap, color: "#e6ecef", roughness: 0.95, side: THREE.DoubleSide });
   const fabricMatB = std({ map: fabricMap, color: "#d5dee3", roughness: 0.95, side: THREE.DoubleSide });
   const tapeMat = std({ color: "#e4e6e4", roughness: 0.85 });
@@ -312,13 +324,21 @@ export function createBathroomScene(
   // left wall
   boxAt(-0.18, -0.24, 0, 0, H, D, wallMats);
   // bathtub enclosure (aerated blocks). Inner faces stay clear of the tub basin (no z-fighting).
-  boxAt(TUB_X0, 0, 0, W, 0.1, TUB_Z, ytongMat);
-  boxAt(TUB_X0, 0.1, TUB_Z - 0.06, W, TUB_TOP, TUB_Z, ytongMat);
-  boxAt(TUB_X0, 0.1, 0, TUB_X0 + 0.06, TUB_TOP, TUB_Z - 0.06, ytongMat);
-  boxAt(TUB_X0 + 0.06, 0.1, 0, W, TUB_TOP, 0.05, ytongMat);
-  boxAt(W - 0.07, 0.1, 0.05, W, TUB_TOP, TUB_Z - 0.06, ytongMat);
+  const tubEnclosure = new THREE.Group();
+  scene.add(tubEnclosure);
+  boxAt(TUB_X0, 0, 0, W, 0.1, TUB_Z, ytongMat, tubEnclosure);
+  for (const r of cutHoles([{ u0: TUB_X0, u1: W, v0: 0.1, v1: TUB_TOP }], [{ u0: TUB_X0 - ADH - T + 0.6, u1: TUB_X0 - ADH - T + 0.6 + DETAIL_DIMENSIONS.hatchWidth, v0: 0.1, v1: 0.1 + DETAIL_DIMENSIONS.hatchHeight }])) {
+    boxAt(r.u0, r.v0, TUB_Z - 0.06, r.u1, r.v1, TUB_Z, ytongMat, tubEnclosure);
+  }
+  boxAt(TUB_X0, 0.1, 0, TUB_X0 + 0.06, TUB_TOP, TUB_Z - 0.06, ytongMat, tubEnclosure);
+  boxAt(TUB_X0 + 0.06, 0.1, 0, W, TUB_TOP, 0.05, ytongMat, tubEnclosure);
+  boxAt(W - 0.07, 0.1, 0.05, W, TUB_TOP, TUB_Z - 0.06, ytongMat, tubEnclosure);
   // WC pre-wall (cement board) with the lit niche and the hidden cabinet
-  boxAt(0, 0, PW_Z, PW_X, WN.y0, D, boardMat);
+  const accessoryHoles = [{ u0: DETAIL_DIMENSIONS.accessoriesZ - 0.09, u1: DETAIL_DIMENSIONS.accessoriesZ + 0.09, v0: DETAIL_DIMENSIONS.brushBottom, v1: DETAIL_DIMENSIONS.paperTop }];
+  boxAt(0, 0, PW_Z, 0.08, WN.y0, D, boardMat);
+  for (const r of cutHoles([{ u0: PW_Z, u1: D, v0: 0, v1: WN.y0 }], accessoryHoles)) {
+    boxAt(0.08, r.v0, r.u0, PW_X, r.v1, r.u1, boardMat);
+  }
   boxAt(0, WN.y0, PW_Z, WN.x0, WN.y1, D, boardMat);
   boxAt(WN.x0, WN.y0, PW_Z, PW_X, WN.y1, WN.z0, boardMat);
   boxAt(WN.x0, WN.y0, WN.z1, PW_X, WN.y1, D, boardMat);
@@ -331,6 +351,9 @@ export function createBathroomScene(
   const cabinetLining = std({ color: "#f3f0ea", roughness: 0.6 });
   boxAt(CAB.x0, CAB.y0, CAB.z0, CAB.x0 + 0.006, CAB.y1, CAB.z1, cabinetLining);
   boxAt(CAB.x0, CAB.y0 + 0.29, CAB.z0, PW_X - 0.02, CAB.y0 + 0.302, CAB.z1, cabinetLining);
+  const cabinetContents = new THREE.Group();
+  cabinetContents.visible = false;
+  scene.add(cabinetContents);
   {
     const m1 = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.14, 18), darkMat));
     m1.position.set(0.14, CAB.y0 + 0.07, 2.15);
@@ -338,7 +361,7 @@ export function createBathroomScene(
     m2.position.set(0.15, CAB.y0 + 0.352, 2.45);
     const m3 = shadowed(new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.18, 0.14, 2, 0.01), std({ color: "#d9d0c3", roughness: 1 })));
     m3.position.set(0.13, CAB.y0 + 0.09, 2.5);
-    scene.add(m1, m2, m3);
+    cabinetContents.add(m1, m2, m3);
   }
 
   // brass section lines: the architectural-model look
@@ -372,10 +395,17 @@ export function createBathroomScene(
 
   /* ---------------------------------------------------------------- surfaces */
   const PFW = D - PW_ZT; // pre-wall front width (wraps over the side tiles' edge)
-  const btnTileRect: Rect = { u0: 0.3, v0: 0, u1: 0.9, v1: 1.2 };
+  const btnTileRect: Rect = { u0: 0.6, v0: 0.6, u1: PFW, v1: 1.2 };
+  const brushRect: Rect = { u0: D - DETAIL_DIMENSIONS.accessoriesZ - 0.09, u1: D - DETAIL_DIMENSIONS.accessoriesZ + 0.09, v0: DETAIL_DIMENSIONS.brushBottom, v1: DETAIL_DIMENSIONS.brushTop };
+  const paperRect: Rect = { ...brushRect, v0: DETAIL_DIMENSIONS.paperBottom, v1: DETAIL_DIMENSIONS.paperTop };
+  const ventSize = DETAIL_DIMENSIONS.ventTile + DETAIL_DIMENSIONS.ventGap * 2;
+  const ventRect: Rect = { u0: PW_ZT - DETAIL_DIMENSIONS.ventZ - ventSize / 2, u1: PW_ZT - DETAIL_DIMENSIONS.ventZ + ventSize / 2, v0: 2.4 - ventSize / 2, v1: 2.4 + ventSize / 2 };
+  const hatchRect: Rect = { u0: 0.6, u1: 0.6 + DETAIL_DIMENSIONS.hatchWidth, v0: 0.1, v1: 0.1 + DETAIL_DIMENSIONS.hatchHeight };
   const wnHole: Rect = { u0: D - WN.z1, v0: WN.y0, u1: D - WN.z0, v1: WN.y1 };
   const cabRect: Rect = { u0: D - CAB.z1, v0: CAB.y0, u1: D - CAB.z0, v1: CAB.y1 };
   const nw = NI.x1 - NI.x0;
+  // Wall tiles butt against the reveal tiles, whose front edge is flush with the wall face.
+  const insetRect = (r: Rect, d: number): Rect => ({ u0: r.u0 + d, v0: r.v0 + d, u1: r.u1 - d, v1: r.v1 - d });
   const nh = NI.y1 - NI.y0;
   const defs: SurfaceDef[] = [
     {
@@ -387,7 +417,7 @@ export function createBathroomScene(
       h: D,
       tw: 1.2,
       th: 0.6,
-      off: [0, -0.1],
+      off: [0, tileGridOffset(D - 0.5, 0.6)],
       tex: [0.37, 0.21],
       holes: [
         { u0: 0.06, v0: D - 0.13, u1: SH_X - 0.06, v1: D },
@@ -403,14 +433,14 @@ export function createBathroomScene(
       w: W,
       h: H,
       tex: [0, 0],
-      holes: [nicheRect, { u0: TUB_X0 - ADH - T, v0: 0, u1: W, v1: TUB_TOP + 0.025 }],
+      holes: [insetRect(nicheRect, ADH), { u0: TUB_X0 - ADH - T, v0: 0, u1: W, v1: TUB_TOP + 0.025 }],
     },
-    { id: "left", o: [0, 0, PW_ZT], u: [0, 0, -1], v: [0, 1, 0], w: PW_ZT, h: H, off: [-0.1, 0], tex: [1.31, 0.47] },
+    { id: "left", o: [0, 0, PW_ZT], u: [0, 0, -1], v: [0, 1, 0], w: PW_ZT, h: H, off: [tileGridOffset(PW_ZT - 0.5, 1.2), 0], tex: [1.31, 0.47], holes: [ventRect] },
     { id: "nicheBack", o: [NI.x0, NI.y0, -0.12], u: [1, 0, 0], v: [0, 1, 0], w: nw, h: nh, tex: [NI.x0, NI.y0] },
-    { id: "nicheBottom", o: [NI.x0, NI.y0, 0], u: [1, 0, 0], v: [0, 0, -1], w: nw, h: 0.12, tex: [NI.x0, NI.y0 - 0.12] },
-    { id: "nicheTop", o: [NI.x0, NI.y1, -0.12], u: [1, 0, 0], v: [0, 0, 1], w: nw, h: 0.12, tex: [NI.x0, NI.y1] },
-    { id: "nicheL", o: [NI.x0, NI.y0, 0], u: [0, 0, -1], v: [0, 1, 0], w: 0.12, h: nh, tex: [NI.x0 - 0.12, NI.y0] },
-    { id: "nicheR", o: [NI.x1, NI.y0, -0.12], u: [0, 0, 1], v: [0, 1, 0], w: 0.12, h: nh, tex: [NI.x1, NI.y0] },
+    { id: "nicheBottom", o: [NI.x0, NI.y0, ADH + T], u: [1, 0, 0], v: [0, 0, -1], w: nw, h: 0.12 + ADH + T, tex: [NI.x0, NI.y0 - 0.12] },
+    { id: "nicheTop", o: [NI.x0, NI.y1, -0.12], u: [1, 0, 0], v: [0, 0, 1], w: nw, h: 0.12 + ADH + T, tex: [NI.x0, NI.y1] },
+    { id: "nicheL", o: [NI.x0, NI.y0, ADH + T], u: [0, 0, -1], v: [0, 1, 0], w: 0.12 + ADH + T, h: nh, tex: [NI.x0 - 0.12, NI.y0] },
+    { id: "nicheR", o: [NI.x1, NI.y0, -0.12], u: [0, 0, 1], v: [0, 1, 0], w: 0.12 + ADH + T, h: nh, tex: [NI.x1, NI.y0] },
     {
       id: "preFront",
       o: [PW_X, 0, D],
@@ -418,20 +448,27 @@ export function createBathroomScene(
       v: [0, 1, 0],
       w: PFW,
       h: H,
-      off: [-0.3, 0],
+      off: [-0.6, 0],
       tex: [0.9, 0.35],
-      holes: [wnHole, cabRect],
+      holes: [insetRect(wnHole, ADH), cabRect, brushRect, paperRect],
       skip: [btnTileRect],
     },
     { id: "preSide", o: [PW_X, 0, PW_Z], u: [-1, 0, 0], v: [0, 1, 0], w: PW_X, h: H, tex: [0.9 + PFW, 0.35] },
     { id: "wnBack", o: [WN.x0, WN.y0, WN.z1], u: [0, 0, -1], v: [0, 1, 0], w: WN.z1 - WN.z0, h: WN.y1 - WN.y0, tex: [1.1, 1.6] },
-    { id: "wnBottom", o: [PW_X, WN.y0, WN.z1], u: [0, 0, -1], v: [-1, 0, 0], w: WN.z1 - WN.z0, h: PW_X - WN.x0, tex: [1.1, 1.46] },
-    { id: "wnTop", o: [WN.x0, WN.y1, WN.z1], u: [0, 0, -1], v: [1, 0, 0], w: WN.z1 - WN.z0, h: PW_X - WN.x0, tex: [1.1, 2.0] },
-    { id: "wnL", o: [PW_X, WN.y0, WN.z1], u: [-1, 0, 0], v: [0, 1, 0], w: PW_X - WN.x0, h: WN.y1 - WN.y0, tex: [0.96, 1.6] },
-    { id: "wnR", o: [WN.x0, WN.y0, WN.z0], u: [1, 0, 0], v: [0, 1, 0], w: PW_X - WN.x0, h: WN.y1 - WN.y0, tex: [1.85, 1.6] },
-    { id: "tubFront", o: [TUB_X0 - ADH - T, 0, TUB_Z], u: [1, 0, 0], v: [0, 1, 0], w: W - TUB_X0 + ADH + T, h: TUB_TOP, off: [-0.1, 0], tex: [0.2, 1.4] },
+    { id: "wnBottom", o: [PW_X + ADH + T, WN.y0, WN.z1], u: [0, 0, -1], v: [-1, 0, 0], w: WN.z1 - WN.z0, h: PW_X - WN.x0 + ADH + T, tex: [1.1, 1.46] },
+    { id: "wnTop", o: [WN.x0, WN.y1, WN.z1], u: [0, 0, -1], v: [1, 0, 0], w: WN.z1 - WN.z0, h: PW_X - WN.x0 + ADH + T, tex: [1.1, 2.0] },
+    { id: "wnL", o: [PW_X + ADH + T, WN.y0, WN.z1], u: [-1, 0, 0], v: [0, 1, 0], w: PW_X - WN.x0 + ADH + T, h: WN.y1 - WN.y0, tex: [0.96, 1.6] },
+    { id: "wnR", o: [WN.x0, WN.y0, WN.z0], u: [1, 0, 0], v: [0, 1, 0], w: PW_X - WN.x0 + ADH + T, h: WN.y1 - WN.y0, tex: [1.85, 1.6] },
+    { id: "tubFront", o: [TUB_X0 - ADH - T, 0, TUB_Z], u: [1, 0, 0], v: [0, 1, 0], w: W - TUB_X0 + ADH + T, h: TUB_TOP, off: [tileGridOffset(-(TUB_X0 - ADH - T), 1.2), 0], tex: [0.2, 1.4], holes: [hatchRect] },
     { id: "tubSide", o: [TUB_X0, 0, 0], u: [0, 0, 1], v: [0, 1, 0], w: TUB_Z, h: TUB_TOP, tex: [2.1, 0.3] },
   ];
+  for (const d of defs) {
+    d.tw = TILE_LAYOUT.width;
+    d.th = TILE_LAYOUT.height;
+    if (d.id === "preSide" || d.id === "tubSide") d.off = [0, 0];
+    if (d.id.startsWith("niche")) d.off = [tileGridOffset(-d.o[0], TILE_LAYOUT.width), tileGridOffset(-d.o[1], TILE_LAYOUT.height)];
+    if (d.id.startsWith("wn")) d.off = [tileGridOffset(d.o[2] - 0.5, TILE_LAYOUT.width), tileGridOffset(-d.o[1], TILE_LAYOUT.height)];
+  }
   const S: Record<string, Surface> = {};
   const sf = (id: string): Surface => {
     const v = S[id];
@@ -447,26 +484,43 @@ export function createBathroomScene(
 
   const overlaps = (a: Rect, b: Rect) => a.u0 < b.u1 - 1e-4 && a.u1 > b.u0 + 1e-4 && a.v0 < b.v1 - 1e-4 && a.v1 > b.v0 + 1e-4;
   const gridRects = (d: SurfaceDef): Rect[] => {
-    const tw = d.tw ?? 0.6;
-    const th = d.th ?? 1.2;
+    const tw = d.tw ?? TILE_LAYOUT.width;
+    const th = d.th ?? TILE_LAYOUT.height;
     const [ou, ov] = d.off ?? [0, 0];
     const out: Rect[] = [];
     for (let u = ou; u < d.w - 0.001; u += tw)
       for (let v = ov; v < d.h - 0.001; v += th)
         out.push({ u0: Math.max(0, u), v0: Math.max(0, v), u1: Math.min(d.w, u + tw), v1: Math.min(d.h, v + th) });
-    return cutHoles(out, d.holes).filter((r) => !(d.skip ?? []).some((k) => overlaps(k, r)));
+    // On detail walls, an opening is cut into ONE slab, not separate grouted strips.
+    const rects = out;
+    return rects.filter((r) => !(d.skip ?? []).some((k) => overlaps(k, r)));
   };
 
   /* ---------------------------------------------------------------- tiles */
   const tiles: Tile[] = [];
-  const makeTile = (surf: Surface, r: Rect, custom?: THREE.Object3D) => {
+  const makeTile = (surf: Surface, r: Rect, custom?: THREE.Object3D, fillsOpening = false) => {
     const w = r.u1 - r.u0;
     const h = r.v1 - r.v0;
     const cu = (r.u0 + r.u1) / 2;
     const cv = (r.v0 + r.v1) / 2;
     const [tu, tv] = surf.def.tex;
     let mesh: THREE.Object3D;
-    if (custom) mesh = custom;
+    const openings = (surf.def.holes ?? []).filter((hole) => overlaps(r, hole));
+    const continuousCut = !custom && !fillsOpening && openings.length > 0;
+    const slabParts = continuousCut ? cutHoles([{ u0: r.u0 + GAP / 2, u1: r.u1 - GAP / 2, v0: r.v0 + GAP / 2, v1: r.v1 - GAP / 2 }], openings) : [];
+    if (continuousCut) {
+      const slab = new THREE.Group();
+      for (const part of slabParts) {
+        const px = (part.u0 + part.u1) / 2;
+        const py = (part.v0 + part.v1) / 2;
+        const geo = new THREE.BoxGeometry(part.u1 - part.u0, part.v1 - part.v0, T);
+        marbleUV(geo, px, py, tu, tv);
+        const piece = shadowed(new THREE.Mesh(geo, [tileMat, tileMat, tileMat, tileMat, tileMat, adhFlat]));
+        piece.position.set(px - cu, py - cv, 0);
+        slab.add(piece);
+      }
+      mesh = slab;
+    } else if (custom) mesh = custom;
     else {
       const geo = new THREE.BoxGeometry(w - GAP, h - GAP, T);
       marbleUV(geo, cu, cv, tu, tv);
@@ -481,17 +535,48 @@ export function createBathroomScene(
     const puv = pg.getAttribute("uv") as THREE.BufferAttribute;
     const pp = pg.getAttribute("position") as THREE.BufferAttribute;
     for (let i = 0; i < pp.count; i++) puv.setXY(i, pp.getX(i) * 6, pp.getY(i) * 42);
-    const patch = new THREE.Mesh(pg, adhRidge);
+    const patch = new THREE.Mesh<THREE.BufferGeometry, THREE.Material>(pg, adhRidge);
+    if (continuousCut) {
+      const parts = cutHoles([r], openings);
+      const shapes = parts.map((part) => {
+        const shape = new THREE.Shape();
+        shape.moveTo(part.u0 - r.u0, part.v0 - cv);
+        shape.lineTo(part.u1 - r.u0, part.v0 - cv);
+        shape.lineTo(part.u1 - r.u0, part.v1 - cv);
+        shape.lineTo(part.u0 - r.u0, part.v1 - cv);
+        shape.closePath();
+        return shape;
+      });
+      patch.geometry.dispose();
+      patch.geometry = new THREE.ShapeGeometry(shapes);
+    }
     patch.receiveShadow = true;
-    patch.position.set(r.u0, cv, 0.0034);
+    patch.position.set(r.u0, cv, 0.0056);
     patch.visible = false;
     surf.group.add(patch);
 
-    const grout = new THREE.Mesh(new THREE.PlaneGeometry(w + GAP * 0.4, h + GAP * 0.4), groutMat);
+    const grout = new THREE.Mesh<THREE.BufferGeometry, THREE.Material>(new THREE.PlaneGeometry(w + GAP * 0.4, h + GAP * 0.4), groutMat);
     grout.receiveShadow = true;
     grout.position.set(cu, cv, ADH + T * 0.82);
     grout.visible = false;
     surf.group.add(grout);
+
+    if (continuousCut) {
+      // Keep grout only in the slab's outer joint; never bridge a cabinet or vent opening.
+      const shape = new THREE.Shape();
+      const parts = cutHoles([{ u0: r.u0 - GAP * 0.2, u1: r.u1 + GAP * 0.2, v0: r.v0 - GAP * 0.2, v1: r.v1 + GAP * 0.2 }], openings);
+      const shapes = parts.map((part) => {
+        const outline = shape.clone();
+        outline.moveTo(part.u0 - cu, part.v0 - cv);
+        outline.lineTo(part.u1 - cu, part.v0 - cv);
+        outline.lineTo(part.u1 - cu, part.v1 - cv);
+        outline.lineTo(part.u0 - cu, part.v1 - cv);
+        outline.closePath();
+        return outline;
+      });
+      grout.geometry.dispose();
+      grout.geometry = new THREE.ShapeGeometry(shapes);
+    }
 
     const t: Tile = { mesh, patch, grout, surf, rect: r, t0: 0, dur: 0.1, lead: 0.07, g0: 0, world: surf.world(cu, cv, 0) };
     tiles.push(t);
@@ -532,6 +617,10 @@ export function createBathroomScene(
       plate.lineTo(-w / 2, h / 2);
       plate.closePath();
       holes(plate as unknown as THREE.Path);
+      // The hidden paper door shares this slab's grid cell: keep its opening clear.
+      const paperHole = new THREE.Path();
+      rectPath(paperHole, (paperRect.u0 + paperRect.u1) / 2 - cu, (paperRect.v0 + paperRect.v1) / 2 - cv, paperRect.u1 - paperRect.u0, paperRect.v1 - paperRect.v0);
+      plate.holes.push(paperHole);
       group.add(shadowed(new THREE.Mesh(extrude(plate, T, -T / 2), [tileMat, tileMat])));
       const back = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.24), backing);
       back.position.set(bx, by, -T / 2 + 0.0008);
@@ -544,43 +633,90 @@ export function createBathroomScene(
       buttonRoot.add(group);
       return { group, press: meshes[meshes.length - 1]! };
     };
-    const withRectHoles = (bw: number, bh: number, gap: number) => {
-      const xs = [bx - (bw + gap) / 2, bx + (bw + gap) / 2];
-      return build(
-        (plate) => {
-          for (const x of xs) {
-            const hole = new THREE.Path();
-            rectPath(hole, x, by, bw + CUT * 2, bh + CUT * 2);
-            (plate as unknown as THREE.Shape).holes.push(hole);
-          }
-        },
-        xs.map((x) => {
-          const sh = new THREE.Shape();
-          rectPath(sh, x, by, bw, bh);
-          return sh;
-        }),
-      );
-    };
-    buttonVariants.narrow = withRectHoles(0.05, 0.17, 0.016);
-    buttonVariants.wide = withRectHoles(0.105, 0.15, 0.012);
-    // round: an outer ring with a small disc cut inside it ("cut into each other")
-    buttonVariants.round = build(
-      (plate) => {
+    // Photo references: unequal adjacent keys sharing a single horizontal cut.
+    const rectangularKeys = (height: number, radius: number) => {
+      const left = bx - 0.044;
+      const right = bx + 0.087;
+      const y = by - 0.028;
+      const key = (x: number, width: number) => {
+        const sh = new THREE.Shape();
+        roundedRect(sh, x - width / 2, y - height / 2, width, height, radius);
+        return sh;
+      };
+      return build((plate) => {
         const hole = new THREE.Path();
-        circle(hole, bx, by, 0.085 + CUT);
+        roundedRect(hole, bx - 0.133 - CUT, y - height / 2 - CUT, 0.266 + CUT * 2, height + CUT * 2, radius + CUT);
         (plate as unknown as THREE.Shape).holes.push(hole);
-      },
-      (() => {
-        const ring = new THREE.Shape();
-        circle(ring, bx, by, 0.085);
-        const inner = new THREE.Path();
-        circle(inner, bx, by, 0.038 + CUT);
-        ring.holes.push(inner);
-        const disc = new THREE.Shape();
-        circle(disc, bx, by, 0.038);
-        return [ring, disc];
-      })(),
-    );
+      }, [key(left, 0.174), key(right, 0.084)]);
+    };
+    buttonVariants.narrow = rectangularKeys(0.042, 0.004);
+    buttonVariants.wide = rectangularKeys(0.125, 0.004);
+    // round: a bigger and a smaller disc side by side
+    {
+      const R1 = 0.062;
+      const R2 = 0.04;
+      const g = 0.014;
+      const total = R1 * 2 + g + R2 * 2;
+      const c1x = bx - total / 2 + R1;
+      const c2x = bx + total / 2 - R2;
+      const c2y = by - 0.021;
+      buttonVariants.round = build(
+        (plate) => {
+          const h1 = new THREE.Path();
+          circle(h1, c1x, by, R1 + CUT);
+          const h2 = new THREE.Path();
+          circle(h2, c2x, c2y, R2 + CUT);
+          (plate as unknown as THREE.Shape).holes.push(h1, h2);
+        },
+        (() => {
+          const d1 = new THREE.Shape();
+          circle(d1, c1x, by, R1);
+          const d2 = new THREE.Shape();
+          circle(d2, c2x, c2y, R2);
+          return [d1, d2];
+        })(),
+      );
+    }
+    // nested: the smaller disc sits in the lower-right of the bigger one, which becomes a "C" (a bite)
+    {
+      const R1 = 0.08;
+      const R2 = 0.053;
+      const c1: [number, number] = [bx - 0.012, by + 0.012];
+      const c2: [number, number] = [c1[0] + 0.11, c1[1] - 0.024];
+      /** Outline of circle 1 outside circle 2, closed along circle 2 (inside → bite, outside → union). */
+      const twoCircles = (p: THREE.Path, r1: number, r2: number, union: boolean) => {
+        const dx = c2[0] - c1[0];
+        const dy = c2[1] - c1[1];
+        const d = Math.hypot(dx, dy);
+        const th = Math.atan2(dy, dx);
+        const a = (r1 * r1 - r2 * r2 + d * d) / (2 * d);
+        const phi1 = Math.acos(Math.max(-1, Math.min(1, a / r1)));
+        const p1: [number, number] = [c1[0] + r1 * Math.cos(th + phi1), c1[1] + r1 * Math.sin(th + phi1)];
+        const p2: [number, number] = [c1[0] + r1 * Math.cos(th - phi1), c1[1] + r1 * Math.sin(th - phi1)];
+        const psi1 = Math.atan2(p1[1] - c2[1], p1[0] - c2[0]);
+        const psi2 = Math.atan2(p2[1] - c2[1], p2[0] - c2[0]);
+        p.moveTo(p1[0], p1[1]);
+        p.absarc(c1[0], c1[1], r1, th + phi1, th - phi1 + Math.PI * 2, false);
+        // Follow the small circle's inner arc for the C-shaped key,
+        // and its outer arc for the combined opening in the wall tile.
+        p.absarc(c2[0], c2[1], r2, psi2, psi1, !union);
+        p.closePath();
+      };
+      buttonVariants.nested = build(
+        (plate) => {
+          const hole = new THREE.Path();
+          twoCircles(hole, R1 + CUT, R2 + CUT, true);
+          (plate as unknown as THREE.Shape).holes.push(hole);
+        },
+        (() => {
+          const cShape = new THREE.Shape();
+          twoCircles(cShape, R1, R2 + CUT * 2, false);
+          const disc = new THREE.Shape();
+          circle(disc, c2[0], c2[1], R2);
+          return [cShape, disc];
+        })(),
+      );
+    }
   }
 
   // floor: first tile is the slow "hero" butterfly demonstration
@@ -620,6 +756,7 @@ export function createBathroomScene(
   ];
   const wallTiles: Tile[] = [];
   let doorTile: Tile | null = null;
+  const detailDoors: { tile: Tile; detail: number; angle: number; tilt?: boolean }[] = [];
   for (const id of wallOrder) {
     const s = sf(id);
     const list = gridRects(s.def)
@@ -627,9 +764,68 @@ export function createBathroomScene(
       .map((r) => makeTile(s, r));
     wallTiles.push(...list);
     if (id === "preFront") {
-      wallTiles.push(makeTile(s, btnTileRect, buttonRoot));
-      doorTile = makeTile(s, cabRect);
+      const buttonTile = makeTile(s, btnTileRect, buttonRoot);
+      {
+        // Its adhesive patch must not cover the hidden paper compartment either.
+        const r = btnTileRect;
+        const cv = (r.v0 + r.v1) / 2;
+        const shapes = cutHoles([r], [paperRect]).map((part) => {
+          const shape = new THREE.Shape();
+          shape.moveTo(part.u0 - r.u0, part.v0 - cv);
+          shape.lineTo(part.u1 - r.u0, part.v0 - cv);
+          shape.lineTo(part.u1 - r.u0, part.v1 - cv);
+          shape.lineTo(part.u0 - r.u0, part.v1 - cv);
+          shape.closePath();
+          return shape;
+        });
+        buttonTile.patch.geometry.dispose();
+        buttonTile.patch.geometry = new THREE.ShapeGeometry(shapes);
+        const cu = (r.u0 + r.u1) / 2;
+        const groutShapes = cutHoles([r], [paperRect]).map((part) => {
+          const shape = new THREE.Shape();
+          shape.moveTo(part.u0 - cu, part.v0 - cv);
+          shape.lineTo(part.u1 - cu, part.v0 - cv);
+          shape.lineTo(part.u1 - cu, part.v1 - cv);
+          shape.lineTo(part.u0 - cu, part.v1 - cv);
+          shape.closePath();
+          return shape;
+        });
+        buttonTile.grout.geometry.dispose();
+        buttonTile.grout.geometry = new THREE.ShapeGeometry(groutShapes);
+      }
+      wallTiles.push(buttonTile);
+      const cabinetPanel = new THREE.Group();
+      const cu = (cabRect.u0 + cabRect.u1) / 2;
+      const cv = (cabRect.v0 + cabRect.v1) / 2;
+      const [tu, tv] = s.def.tex;
+      const backing = new THREE.Mesh(new THREE.BoxGeometry(cabRect.u1 - cabRect.u0 - GAP, cabRect.v1 - cabRect.v0 - GAP, T * 0.6), groutMat);
+      backing.position.z = -T * 0.4;
+      cabinetPanel.add(backing);
+      for (const part of gridPieces(cabRect, s.def.off ?? [0, 0])) {
+        const px = (part.u0 + part.u1) / 2;
+        const py = (part.v0 + part.v1) / 2;
+        const g = new THREE.BoxGeometry(part.u1 - part.u0 - GAP, part.v1 - part.v0 - GAP, T);
+        marbleUV(g, px, py, tu, tv);
+        const panel = shadowed(new THREE.Mesh(g, tileMat));
+        panel.position.set(px - cu, py - cv, 0);
+        cabinetPanel.add(panel);
+      }
+      doorTile = makeTile(s, cabRect, cabinetPanel, true);
       wallTiles.push(doorTile);
+      for (const rect of [brushRect, paperRect]) {
+        const tile = makeTile(s, rect, undefined, true);
+        wallTiles.push(tile);
+        detailDoors.push({ tile, detail: N + 1, angle: 0, tilt: rect === brushRect });
+      }
+    }
+    if (id === "left") {
+      const vent = makeTile(s, { u0: ventRect.u0 + DETAIL_DIMENSIONS.ventGap, u1: ventRect.u1 - DETAIL_DIMENSIONS.ventGap, v0: ventRect.v0 + DETAIL_DIMENSIONS.ventGap, v1: ventRect.v1 - DETAIL_DIMENSIONS.ventGap }, undefined, true);
+      wallTiles.push(vent);
+    }
+    if (id === "tubFront") {
+      const tile = makeTile(s, hatchRect, undefined, true);
+      wallTiles.push(tile);
+      detailDoors.push({ tile, detail: N + 3, angle: 0 });
     }
   }
   wallTiles.forEach((t, i) => {
@@ -638,14 +834,43 @@ export function createBathroomScene(
     t.lead = 0.06;
   });
 
+  for (const [id, rects] of [["preFront", [brushRect, paperRect]], ["left", [ventRect]], ["tubFront", [hatchRect]]] as [string, Rect[]][]) {
+    const surf = sf(id);
+    for (const r of rects) {
+      const backing = new THREE.Mesh(new THREE.PlaneGeometry(r.u1 - r.u0, r.v1 - r.v0), darkMat);
+      backing.position.set((r.u0 + r.u1) / 2, (r.v0 + r.v1) / 2, id === "preFront" ? -0.155 : ADH + T - 0.001);
+      surf.group.add(backing);
+    }
+  }
+
   // shelves cut from the same tile, set into the shower niche
-  const shelves: THREE.Mesh[] = [];
+  const shelves: THREE.Group[] = [];
+  const mitredSlab = (width: number, depth: number, thickness: number, upper: boolean) => {
+    const outer = [[-width / 2, -depth / 2], [width / 2, -depth / 2], [width / 2, depth / 2], [-width / 2, depth / 2]];
+    const inner = [[-width / 2 + thickness, -depth / 2 + thickness], [width / 2 - thickness, -depth / 2 + thickness], [width / 2 - thickness, depth / 2 - thickness], [-width / 2 + thickness, depth / 2 - thickness]];
+    const yOuter = upper ? 0.011 : -0.011;
+    const yInner = upper ? 0.0004 : -0.0004;
+    const points = [...outer.map(([x, z]) => new THREE.Vector3(x, yOuter, z)), ...inner.map(([x, z]) => new THREE.Vector3(x, yInner, z))];
+    const g = new THREE.BufferGeometry().setFromPoints(points);
+    g.setIndex([0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5, 2, 3, 7, 2, 7, 6, 3, 0, 4, 3, 4, 7]);
+    g.computeVertexNormals();
+    const uv = points.flatMap(p => [(NI.x0 + nw / 2 + p.x) / TEX_M, (NI.y0 + p.z) / TEX_M]);
+    g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    const material = tileMat.clone();
+    material.side = THREE.DoubleSide;
+    disposables.push(material);
+    return shadowed(new THREE.Mesh(g, material));
+  };
   for (const y of NI.shelves) {
-    const g = new THREE.BoxGeometry(nw - 0.034, 0.02, 0.12);
-    const pos = g.getAttribute("position") as THREE.BufferAttribute;
-    const uv = g.getAttribute("uv") as THREE.BufferAttribute;
-    for (let i = 0; i < pos.count; i++) uv.setXY(i, (NI.x0 + nw / 2 + pos.getX(i)) / TEX_M, (y + pos.getZ(i) + 0.4) / TEX_M);
-    const m = shadowed(new THREE.Mesh(g, tileMat));
+    const m = new THREE.Group();
+    m.add(mitredSlab(nw - 0.034, 0.12, 0.0106, true), mitredSlab(nw - 0.034, 0.12, 0.0106, false));
+    // Tiled fascia closes the hollow shelf; its edges meet the bevelled slabs.
+    const faceGeo = new THREE.PlaneGeometry(nw - 0.034, 0.0204);
+    marbleUV(faceGeo, NI.x0 + nw / 2, y, 0, 0);
+    const fascia = shadowed(new THREE.Mesh(faceGeo, tileMat));
+    fascia.position.z = 0.0601;
+    m.add(fascia);
+    boxAt(-(nw - 0.034) / 2, -0.0004, 0.059, (nw - 0.034) / 2, 0.0004, 0.0602, jollyMat, m);
     m.position.set(NI.x0 + nw / 2, y, -0.12 + 0.016 + 0.06);
     m.visible = false;
     scene.add(m);
@@ -699,13 +924,38 @@ export function createBathroomScene(
   jolly.visible = false;
   scene.add(jolly);
 
+  const nicheTrim = new THREE.Group();
+  const nicheJolly = new THREE.Group();
+  scene.add(nicheTrim, nicheJolly);
+  // Edge profile sits exactly on the outer corner where wall face meets the flush reveal.
+  const perimeter = (surf: Surface, hole: Rect) => {
+    const r = insetRect(hole, ADH);
+    for (const [root, width, mat] of [[nicheTrim, 0.0035, aluMat], [nicheJolly, 0.0009, jollyMat]] as const) {
+      const frame = new THREE.Group();
+      frame.position.copy(surf.group.position);
+      frame.quaternion.copy(surf.group.quaternion);
+      root.add(frame);
+      const z1 = ADH + T + 0.0004;
+      const z0 = z1 - width;
+      boxAt(r.u0 - width / 2, r.v0 - width / 2, z0, r.u1 + width / 2, r.v0 + width / 2, z1, mat, frame);
+      boxAt(r.u0 - width / 2, r.v1 - width / 2, z0, r.u1 + width / 2, r.v1 + width / 2, z1, mat, frame);
+      boxAt(r.u0 - width / 2, r.v0, z0, r.u0 + width / 2, r.v1, z1, mat, frame);
+      boxAt(r.u1 - width / 2, r.v0, z0, r.u1 + width / 2, r.v1, z1, mat, frame);
+    }
+  };
+  perimeter(sf("back"), nicheRect);
+  perimeter(sf("preFront"), wnHole);
+
   /* ---------------------------------------------------------------- wipes (sanding, primer, waterproofing) */
   const wipes = {
     sand: [] as Wipe[],
     primer: [] as Wipe[],
+    wp1: [] as Wipe[],
+    wp1Floor: [] as Wipe[],
     wpA: [] as Wipe[],
     wpAFloor: [] as Wipe[],
     wpB: [] as Wipe[],
+    wpBand: [] as Wipe[],
   };
   const addWipe = (list: Wipe[], id: string, rects: Rect[], holes: Rect[], t0: number, t1: number, mat: THREE.Material, depth: number) => {
     const surf = sf(id);
@@ -727,7 +977,6 @@ export function createBathroomScene(
   const floorHoles = sf("floor").def.holes ?? [];
   const floorHolesWp = [
     { u0: 0.1, v0: D - 0.11, u1: SH_X - 0.1, v1: D },
-    { u0: TUB_X0, v0: D - TUB_Z, u1: W, v1: D },
     { u0: 0, v0: 0, u1: PW_X, v1: D - PW_Z },
   ];
 
@@ -738,42 +987,65 @@ export function createBathroomScene(
   addWipe(wipes.primer, "left", full("left"), [], 0.72, 0.84, primerMat, 0.0008);
   for (const id of nicheIds) addWipe(wipes.primer, id, full(id), [], 0.74, 0.8, primerMat, 0.0008);
   for (const id of ["preFront", "preSide", "tubFront", "tubSide"])
-    addWipe(wipes.primer, id, full(id), id === "preFront" ? [wnHole, cabRect] : [], 0.8, 0.88, primerMat, 0.0008);
+    addWipe(wipes.primer, id, full(id), id === "preFront" ? [wnHole, cabRect, brushRect, paperRect] : [], 0.8, 0.88, primerMat, 0.0008);
   addWipe(wipes.primer, "floor", full("floor"), floorHolesWp, 0.84, 0.95, primerMat, 0.0008);
 
-  // variant A: fibre-reinforced cement membrane on the floor, liquid membrane on walls and niches
-  addWipe(wipes.wpAFloor, "floor", full("floor"), floorHolesWp, 3.04, 3.3, cementWpMat, 0.0016);
-  addWipe(wipes.wpA, "back", [{ u0: 0, v0: 0, u1: TUB_X0, v1: 2.1 }], [nicheRect], 3.22, 3.44, membraneMat, 0.0016);
-  addWipe(wipes.wpA, "back", [{ u0: TUB_X0, v0: TUB_TOP, u1: W, v1: 1.1 }], [], 3.4, 3.5, membraneMat, 0.0016);
-  addWipe(wipes.wpA, "left", [{ u0: PW_ZT - SH_Z - 0.2, v0: 0, u1: PW_ZT, v1: 2.1 }], [], 3.3, 3.52, membraneMat, 0.0016);
-  addWipe(wipes.wpA, "left", [{ u0: 0, v0: 0, u1: PW_ZT - SH_Z - 0.2, v1: 0.2 }], [], 3.46, 3.54, membraneMat, 0.0016);
-  for (const id of nicheIds) addWipe(wipes.wpA, id, full(id), [], 3.36, 3.46, membraneMat, 0.0016);
-  addWipe(wipes.wpA, "tubSide", full("tubSide"), [], 3.5, 3.6, membraneMat, 0.0016);
-  addWipe(wipes.wpA, "preSide", [{ u0: 0, v0: 0, u1: PW_X, v1: 0.2 }], [], 3.54, 3.62, membraneMat, 0.0016);
-  addWipe(wipes.wpA, "preFront", [{ u0: 0, v0: 0, u1: PFW, v1: 0.2 }], [], 3.54, 3.64, membraneMat, 0.0016);
+  // waterproofing areas: shower zone full height, tub surround, low bands elsewhere
+  const D1 = 0.0016; // first layer (tapes and sleeves are pressed into it)
+  const D2 = 0.0038; // second layer, covers the tapes
+  const wallAreas = (
+    list: Wipe[],
+    t0: number,
+    mat: THREE.Material,
+    depth: number,
+  ) => {
+    const k = (a: number) => t0 + a;
+    addWipe(list, "back", [{ u0: 0, v0: 0, u1: TUB_X0, v1: 2.3 }], [nicheRect], k(0), k(0.22), mat, depth);
+    addWipe(list, "back", [{ u0: TUB_X0, v0: 0, u1: W, v1: 1.1 }], [], k(0.18), k(0.28), mat, depth);
+    addWipe(list, "left", [{ u0: PW_ZT - SH_Z - 0.2, v0: 0, u1: PW_ZT, v1: 2.3 }], [], k(0.08), k(0.3), mat, depth);
+    addWipe(list, "left", [{ u0: 0, v0: 0, u1: PW_ZT - SH_Z - 0.2, v1: 0.25 }], [], k(0.24), k(0.32), mat, depth);
+    for (const id of nicheIds) addWipe(list, id, full(id), [], k(0.14), k(0.24), mat, depth);
+    addWipe(list, "tubSide", full("tubSide"), [], k(0.28), k(0.38), mat, depth);
+    addWipe(list, "tubFront", [{ u0: 0, v0: 0, u1: sf("tubFront").def.w, v1: 0.25 }], [], k(0.3), k(0.4), mat, depth);
+    addWipe(list, "preSide", [{ u0: 0, v0: 0, u1: PW_X, v1: 0.25 }], [], k(0.32), k(0.4), mat, depth);
+    addWipe(list, "preFront", [{ u0: 0, v0: 0, u1: PFW, v1: 0.25 }], [brushRect, paperRect], k(0.32), k(0.42), mat, depth);
+  };
 
-  // variant B: non-woven waterproof fabric in 1 m strips, every joint overlapped
+  // 1st layer (both variants): liquid membrane on walls and niches, fibre-reinforced cement on the floor
+  addWipe(wipes.wp1Floor, "floor", full("floor"), floorHolesWp, 2.04, 2.22, cementWpMat, D1);
+  wallAreas(wipes.wp1, 2.06, membrane1Mat, D1);
+
+  // 2nd layer, variant A: second coat of the same system
+  addWipe(wipes.wpAFloor, "floor", full("floor"), floorHolesWp, 3.04, 3.3, cementWp2Mat, D2);
+  wallAreas(wipes.wpA, 3.22, membrane2Mat, D2);
+
+  // 2nd layer, variant B: membrane sheets (e.g. Mapeguard WP 200) in 1 m strips, joints over-bandaged
   {
-    const strips: { id: string; holes: Rect[]; h?: number }[] = [
+    const strips: { id: string; holes: Rect[] }[] = [
       { id: "floor", holes: floorHolesWp },
-      { id: "back", holes: [nicheRect, { u0: TUB_X0, v0: 0, u1: W, v1: TUB_TOP }] },
+      { id: "back", holes: [nicheRect] },
       { id: "left", holes: [] },
-      { id: "preFront", holes: [wnHole, cabRect] },
+      { id: "preFront", holes: [wnHole, cabRect, brushRect, paperRect] },
     ];
     let k = 0;
-    const totalStrips = strips.reduce((a, s) => a + Math.ceil((sf(s.id).def.w - 0.1) / 0.9), 0) + 4;
-    const slot = 0.8 / totalStrips;
-    for (const st of strips) {
-      const d = sf(st.id).def;
+    const totalStrips = strips.reduce((a, st2) => a + Math.ceil((sf(st2.id).def.w - 0.1) / 0.9), 0) + 4;
+    const slot = 0.5 / totalStrips;
+    for (const st2 of strips) {
+      const d = sf(st2.id).def;
       let i = 0;
       for (let u = 0; u < d.w - 0.1; u += 0.9, i++, k++) {
         const t0 = 3.04 + k * slot;
-        addWipe(wipes.wpB, st.id, [{ u0: u, v0: 0, u1: Math.min(d.w, u + 1.0), v1: d.h }], st.holes, t0, t0 + slot * 1.6, i % 2 ? fabricMatB : fabricMatA, 0.0014 + (i % 2) * 0.0007);
+        addWipe(wipes.wpB, st2.id, [{ u0: u, v0: 0, u1: Math.min(d.w, u + 1.0), v1: d.h }], st2.holes, t0, t0 + slot * 1.6, i % 2 ? fabricMatB : fabricMatA, D2 + (i % 2) * 0.0005);
+        // bandage tape over the 10 cm overlap, bedded in special adhesive
+        if (u + 1.0 < d.w - 0.02) {
+          const bt = 3.56 + (k / totalStrips) * 0.3;
+          addWipe(wipes.wpBand, st2.id, [{ u0: u + 0.89, v0: 0, u1: u + 1.01, v1: d.h }], st2.holes, bt, bt + 0.08, bandMat, D2 + 0.0012);
+        }
       }
     }
-    for (const id of [...nicheIds, "tubSide", "preSide"]) {
+    for (const id of [...nicheIds, "tubSide", "tubFront", "preSide"]) {
       const t0 = 3.04 + k * slot;
-      addWipe(wipes.wpB, id, full(id), [], t0, t0 + slot * 2, fabricMatA, 0.0014);
+      addWipe(wipes.wpB, id, full(id), [], t0, t0 + slot * 2, fabricMatA, D2);
     }
   }
 
@@ -849,7 +1121,8 @@ export function createBathroomScene(
     axis: "x" | "all";
   }
   const grows: Grow[] = [];
-  const addTape = (a: V3, b: V3, n1: V3, n2: V3, t0: number, t1: number) => {
+  const bandGrows: Grow[] = [];
+  const addTape = (a: V3, b: V3, n1: V3, n2: V3, t0: number, t1: number, lift = 0.0024, into: Grow[] = grows) => {
     const A = new THREE.Vector3(...a);
     const B = new THREE.Vector3(...b);
     const dir = B.clone().sub(A);
@@ -863,13 +1136,13 @@ export function createBathroomScene(
       const E = new THREE.Vector3(...ext);
       const g = new THREE.BoxGeometry(L, 0.06, 0.0018);
       g.translate(L / 2, 0.03, 0);
-      const m = new THREE.Mesh(g, tapeMat);
+      const m = new THREE.Mesh(g, into === grows ? tapeMat : bandMat);
       m.receiveShadow = true;
       m.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(dir, E, Nn));
-      m.position.copy(A).addScaledVector(Nn, 0.0024);
+      m.position.copy(A).addScaledVector(Nn, lift);
       m.visible = false;
       scene.add(m);
-      grows.push({ obj: m, t0, t1, axis: "x" });
+      into.push({ obj: m, t0, t1, axis: "x" });
     }
   };
   const tapeDefs: [V3, V3, V3, V3][] = [
@@ -880,7 +1153,7 @@ export function createBathroomScene(
     [[TUB_X0, 0, TUB_Z], [W, 0, TUB_Z], [0, 0, 1], [0, 1, 0]],
     [[TUB_X0, TUB_TOP + 0.025, 0.02], [W, TUB_TOP + 0.025, 0.02], [0, 0, 1], [0, 1, 0]],
     [[0, 0, PW_Z], [PW_X, 0, PW_Z], [0, 0, -1], [0, 1, 0]],
-    [[0, 0, PW_Z], [0, 2.1, PW_Z], [1, 0, 0], [0, 0, -1]],
+    [[0, 0, PW_Z], [0, 0.2, PW_Z], [1, 0, 0], [0, 0, -1]],
     [[PW_X, 0, PW_Z], [PW_X, 0, D], [1, 0, 0], [0, 1, 0]],
     [[NI.x0, NI.y0, -0.12], [NI.x1, NI.y0, -0.12], [0, 0, 1], [0, 1, 0]],
     [[NI.x0, NI.y1, -0.12], [NI.x1, NI.y1, -0.12], [0, 0, 1], [0, -1, 0]],
@@ -888,8 +1161,10 @@ export function createBathroomScene(
     [[NI.x1, NI.y0, -0.12], [NI.x1, NI.y1, -0.12], [0, 0, 1], [-1, 0, 0]],
   ];
   tapeDefs.forEach((d, i) => {
-    const t0 = 2.06 + i * 0.042;
-    addTape(d[0], d[1], d[2], d[3], t0, t0 + 0.12);
+    const t0 = 2.42 + i * 0.026;
+    addTape(d[0], d[1], d[2], d[3], t0, t0 + 0.1);
+    const b0 = 3.62 + i * 0.022;
+    addTape(d[0], d[1], d[2], d[3], b0, b0 + 0.08, D2 + 0.0024, bandGrows);
   });
   {
     const hw = SH_X / 2 - 0.02;
@@ -911,7 +1186,7 @@ export function createBathroomScene(
     collar.position.set(SH_X / 2, 0.0025, 0.07);
     collar.visible = false;
     scene.add(collar);
-    grows.push({ obj: collar, t0: 2.66, t1: 2.8, axis: "all" });
+    grows.push({ obj: collar, t0: 2.74, t1: 2.86, axis: "all" });
   }
   const sleeveShape = (() => {
     const s = new THREE.Shape();
@@ -940,7 +1215,7 @@ export function createBathroomScene(
     sl.position.set(...o.p).addScaledVector(Nn, 0.0026);
     sl.visible = false;
     scene.add(sl);
-    grows.push({ obj: sl, t0: 2.72 + i * 0.04, t1: 2.84 + i * 0.04, axis: "all" });
+    grows.push({ obj: sl, t0: 2.78 + i * 0.035, t1: 2.88 + i * 0.035, axis: "all" });
     const cyl = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.07, 16), steelMat));
     cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), Nn);
     cyl.position.set(...o.p).addScaledVector(Nn, 0.035);
@@ -1028,7 +1303,7 @@ export function createBathroomScene(
     boxAt(1.44, 0.016, 0.016, 1.46, 2.0, 0.034, brassMat, glass);
     boxAt(0.016, 1.975, 0.925, 1.45, 1.99, 0.94, brassMat, glass);
   }
-  addAppear(glass, 10.04, 10.22, [0, 0.6, 0]);
+  addAppear(glass, 14.04, 14.22, [0, 0.6, 0]);
 
   const shower = new THREE.Group();
   boxAt(0.68, 2.24, 0.016, 0.72, 2.26, 0.5, brassMat, shower);
@@ -1040,7 +1315,7 @@ export function createBathroomScene(
     shower.add(plate);
     boxAt(0.028, 1.04, 0.585, 0.12, 1.06, 0.615, brassMat, shower);
   }
-  addAppear(shower, 10.1, 10.26, [0.12, 0.25, 0.12]);
+  addAppear(shower, 14.1, 14.26, [0.12, 0.25, 0.12]);
 
   const spout = new THREE.Group();
   {
@@ -1050,7 +1325,7 @@ export function createBathroomScene(
     spout.add(plate);
     boxAt(2.335, 0.805, 0.016, 2.365, 0.83, 0.2, brassMat, spout);
   }
-  addAppear(spout, 10.14, 10.28, [0, 0, 0.2]);
+  addAppear(spout, 14.14, 14.28, [0, 0, 0.2]);
 
   const wc = new THREE.Group();
   {
@@ -1083,7 +1358,116 @@ export function createBathroomScene(
     wc.rotation.y = Math.PI / 2;
     wc.position.set(PW_X + ADH + T, 0, WCZ);
   }
-  addAppear(wc, 10.18, 10.36, [-0.35, 0, 0]);
+  addAppear(wc, 10.02, 10.18, [-0.35, 0, 0]);
+
+  // Custom fabricated basin, mitred tile panels and recessed linear outlet.
+  const basin = new THREE.Group();
+  const tileBox = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, parent: THREE.Object3D) => {
+    const m = boxAt(x0, y0, z0, x1, y1, z1, tileMat, parent);
+    const p = m.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const uv = m.geometry.getAttribute("uv") as THREE.BufferAttribute;
+    for (let i = 0; i < p.count; i++) uv.setXY(i, (m.position.z + p.getZ(i)) / TEX_M, (m.position.x + p.getX(i) + m.position.y + p.getY(i)) / TEX_M);
+    return m;
+  };
+  // 1 m basin: z 2.85-3.85, outlet hidden under a removable tile strip at the back.
+  const BZ0 = 2.85, BZ1 = 3.85;
+  tileBox(0.256, 0.72, BZ0, 0.79, 0.86, BZ0 + 0.026, basin);
+  tileBox(0.256, 0.72, BZ1 - 0.026, 0.79, 0.86, BZ1, basin);
+  tileBox(0.764, 0.72, BZ0 + 0.026, 0.79, 0.86, BZ1 - 0.026, basin);
+  tileBox(0.256, 0.72, BZ0 + 0.026, 0.282, 0.86, BZ1 - 0.026, basin);
+  const basinBottom = tileBox(0.34, 0.738, BZ0 + 0.026, 0.764, 0.754, BZ1 - 0.026, basin);
+  basinBottom.rotation.z = 0.02;
+  // drain channel below the strip, and the strip itself (lifted in its detail view)
+  boxAt(0.282, 0.70, BZ0 + 0.03, 0.34, 0.705, BZ1 - 0.03, darkMat, basin);
+  // visible outlet in the channel: brass ring with a dark throat
+  const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.006, 32), brassMat);
+  ring.position.set(0.311, 0.708, 3.35);
+  const throat = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.008, 32), new THREE.MeshBasicMaterial({ color: "#050505" }));
+  throat.position.set(0.311, 0.709, 3.35);
+  basin.add(ring, throat);
+  const drainStrip = new THREE.Group();
+  tileBox(0.284, 0.733, BZ0 + 0.03, 0.336, 0.749, BZ1 - 0.03, drainStrip);
+  basin.add(drainStrip);
+  // Wall-mounted brass tap and a matching tile soap dispenser.
+  boxAt(0.256, 1.06, 3.33, 0.50, 1.082, 3.356, brassMat, basin);
+  boxAt(0.479, 1.02, 3.33, 0.501, 1.082, 3.356, brassMat, basin);
+  tileBox(0.29, 0.86, 3.62, 0.368, 1.02, 3.698, basin);
+  const pump = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.045, 20), darkMat);
+  pump.position.set(0.329, 1.042, 3.659);
+  basin.add(pump);
+  boxAt(0.325, 1.06, 3.648, 0.40, 1.073, 3.67, darkMat, basin);
+  // running tap: stream from the spout and water collecting in the basin
+  const basinWaterMat = waterMat.clone();
+  disposables.push(basinWaterMat);
+  const basinWater = new THREE.Mesh(new THREE.PlaneGeometry(0.764 - 0.35, BZ1 - BZ0 - 0.06), basinWaterMat);
+  basinWater.rotation.x = -Math.PI / 2;
+  basinWater.rotation.z = 0.02;
+  basinWater.renderOrder = 3;
+  basinWater.visible = false;
+  basin.add(basinWater);
+  const tapStreamMat = waterMat.clone();
+  disposables.push(tapStreamMat);
+  const tapStream = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.008, 1, 10), tapStreamMat);
+  tapStream.visible = false;
+  basin.add(tapStream);
+  // Tiled vanity with two drawers; an LED strip lights each drawer as it opens.
+  tileBox(0.256, 0.16, BZ0, 0.79, 0.70, BZ0 + 0.026, basin);
+  tileBox(0.256, 0.16, BZ1 - 0.026, 0.79, 0.70, BZ1, basin);
+  tileBox(0.256, 0.676, BZ0 + 0.026, 0.79, 0.70, BZ1 - 0.026, basin);
+  boxAt(0.26, 0.16, BZ0 + 0.026, 0.27, 0.676, BZ1 - 0.026, darkMat, basin);
+  const drawerLedMat = new THREE.MeshBasicMaterial({ color: "#2a2b2f" });
+  const drawerInnerMat = new THREE.MeshStandardMaterial({ color: "#d9d4ca", roughness: 0.8 });
+  disposables.push(drawerLedMat, drawerInnerMat);
+  const drawers: THREE.Group[] = [];
+  for (const [y0, y1] of [[0.16, 0.414], [0.42, 0.674]] as const) {
+    const d = new THREE.Group();
+    tileBox(0.766, y0 + 0.002, BZ0 + 0.028, 0.79, y1 - 0.002, BZ1 - 0.028, d);
+    boxAt(0.33, y0 + 0.02, BZ0 + 0.04, 0.766, y0 + 0.03, BZ1 - 0.04, drawerInnerMat, d);
+    boxAt(0.33, y0 + 0.03, BZ0 + 0.04, 0.34, y1 - 0.04, BZ1 - 0.04, drawerInnerMat, d);
+    boxAt(0.33, y0 + 0.03, BZ0 + 0.04, 0.766, y1 - 0.04, BZ0 + 0.05, drawerInnerMat, d);
+    boxAt(0.33, y0 + 0.03, BZ1 - 0.05, 0.766, y1 - 0.04, BZ1 - 0.04, drawerInnerMat, d);
+    boxAt(0.35, y1 - 0.045, BZ0 + 0.06, 0.745, y1 - 0.04, BZ0 + 0.066, drawerLedMat, d);
+    basin.add(d);
+    drawers.push(d);
+  }
+  const drawerLight = new THREE.PointLight("#ffe1b0", 0, 1.2, 2);
+  drawerLight.position.set(0.7, 0.5, 3.35);
+  basin.add(drawerLight);
+  let drawerOpen = 0;
+  // slow, deliberate lift while the concealed-drain close-up is open
+  let drainFocusT = 0;
+  addAppear(basin, 10.08, 10.3, [-0.3, 0.2, 0]);
+
+  // All WC accessories remain recessed behind the closed tiled doors.
+  const paper = new THREE.Group();
+  const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.041, 0.041, 0.145, 28), ceramicMat);
+  roll.rotation.x = Math.PI / 2;
+  roll.position.set(0.15, 0.884, DETAIL_DIMENSIONS.accessoriesZ);
+  paper.add(roll);
+  const sheet = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.125), ceramicMat);
+  sheet.rotation.y = Math.PI / 2;
+  sheet.position.set(0.195, 0.82, DETAIL_DIMENSIONS.accessoriesZ);
+  paper.add(sheet);
+  addAppear(paper, 12.05, 12.22, [0, 0, 0]);
+  // Paper tail peeks out through a paper-wide slot joint under the closed door.
+  const paperFlap = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.065), ceramicMat);
+  {
+    const pf = sf("preFront");
+    pf.group.updateMatrixWorld(true);
+    const fu = (brushRect.u0 + brushRect.u1) / 2;
+    pf.world(fu, DETAIL_DIMENSIONS.paperBottom - 0.0325, ADH + T + 0.0015, paperFlap.position);
+    paperFlap.quaternion.copy(pf.group.getWorldQuaternion(new THREE.Quaternion()));
+    const slot = new THREE.Mesh(new THREE.PlaneGeometry(0.118, 0.004), darkMat);
+    pf.world(fu, DETAIL_DIMENSIONS.paperBottom, ADH + T + 0.0008, slot.position);
+    slot.quaternion.copy(paperFlap.quaternion);
+    paperFlap.userData["slot"] = slot;
+    scene.add(paperFlap, slot);
+  }
+  const brush = new THREE.Group();
+  boxAt(0.12, 0.18, DETAIL_DIMENSIONS.accessoriesZ - 0.052, 0.19, 0.29, DETAIL_DIMENSIONS.accessoriesZ + 0.052, darkMat, brush);
+  boxAt(0.145, 0.29, DETAIL_DIMENSIONS.accessoriesZ - 0.008, 0.156, 0.58, DETAIL_DIMENSIONS.accessoriesZ + 0.003, steelMat, brush);
+  scene.add(brush);
+  brush.visible = false;
 
   const shelfY = NI.shelves[0]! + 0.01;
   const decor = new THREE.Group();
@@ -1120,20 +1504,22 @@ export function createBathroomScene(
       decor.add(leaf);
     }
   }
-  addAppear(decor, 10.28, 10.46, [0, 0.25, 0]);
+  addAppear(decor, 14.28, 14.46, [0, 0.25, 0]);
 
   // LED strips: shower niche (top + under each shelf) and the WC niche
+  const nicheLeds = new THREE.Group();
+  scene.add(nicheLeds);
   {
     const addLed = (x0: number, x1: number, y: number, mat: THREE.Material) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.006, 0.01), mat);
       m.position.set((x0 + x1) / 2, y, -0.02);
-      scene.add(m);
+      nicheLeds.add(m);
     };
     addLed(NI.x0 + 0.03, NI.x1 - 0.03, NI.y1 - 0.024, ledMat);
     for (const y of NI.shelves) addLed(NI.x0 + 0.03, NI.x1 - 0.03, y - 0.016, ledMat);
     const wl = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.006, WN.z1 - WN.z0 - 0.06), wcLedMat);
     wl.position.set(PW_X - 0.012, WN.y1 - 0.024, WCZ + 0.025);
-    scene.add(wl);
+    nicheLeds.add(wl);
   }
 
   // candles (romantic mode / filled tub)
@@ -1347,11 +1733,14 @@ export function createBathroomScene(
     corner: null as CornerType | null,
     button: null as ButtonType | null,
     nicheLit: true,
+    roomLit: true,
+    bathHovered: false,
     moodTarget: 0,
     mood: 0,
     showerTarget: 0,
     shower: 0,
     tubTarget: 0,
+    basin: 0,
     tub: 0,
     candles: 0,
     door: 0,
@@ -1360,8 +1749,6 @@ export function createBathroomScene(
 
   const hazeTint = new THREE.Color("#d6d1c7");
   const white = new THREE.Color("#ffffff");
-  const coat1 = new THREE.Color("#8fb6c4");
-  const coat2 = new THREE.Color("#4f8297");
   const ledOff = new THREE.Color("#2a2b2f");
   const ledOn = new THREE.Color("#ffe1b0");
 
@@ -1377,6 +1764,10 @@ export function createBathroomScene(
     { p: [3.5, 1.6, 3.4], t: [1.3, 1.0, 0.6] },
     { p: [3.4, 1.7, 3.3], t: [0.8, 1.05, 1.1] },
     { p: [1.0, 1.12, 2.06], t: [0.25, 1.02, 2.3] },
+    { p: [...FINISH_DETAILS[0].camera], t: [...FINISH_DETAILS[0].target] },
+    { p: [2.4, 2.25, 2.4], t: [0.12, 2.15, 2.32] },
+    { p: [...FINISH_DETAILS[1].camera], t: [...FINISH_DETAILS[1].target] },
+    { p: [...FINISH_DETAILS[2].camera], t: [...FINISH_DETAILS[2].target] },
     { p: [4.9, 2.25, 5.3], t: [1.35, 0.95, 1.25] },
   ];
   // viewpoints used by the explanation hotspots once the bathroom is finished
@@ -1386,6 +1777,10 @@ export function createBathroomScene(
   FOCUS[5] = { p: [1.6, 1.6, 2.6], t: [0.25, 1.75, 2.3] };
   FOCUS[7] = { p: [2.8, 1.4, 2.4], t: [1.9, 0.9, 0.1] };
   FOCUS[8] = { p: [2.9, 1.4, 2.2], t: [2.3, 0.6, 0.3] };
+
+  for (const d of FINISH_DETAILS) FOCUS.push({ p: [...d.camera], t: [...d.target] });
+  FOCUS[N + 4] = { p: [NI.x0 + nw / 2 + 0.35, NI.y1 + 0.15, 1.2], t: [NI.x0 + nw / 2, NI.y0 + nh / 2, 0] };
+  FOCUS[N + 5] = { p: [NI.x0 + nw / 2 + 0.25, (NI.shelves[0] ?? NI.y0) + 0.18, 0.85], t: [NI.x0 + nw / 2, NI.shelves[0] ?? NI.y0, -0.02] };
 
   const tmpA = new THREE.Vector3();
   const tmpB = new THREE.Vector3();
@@ -1412,15 +1807,15 @@ export function createBathroomScene(
     const i = Math.min(N - 1, Math.floor(s));
     const f = s - i;
     // the button step already zooms out at its end, so the last step starts from there
-    const a = i === 10 ? KF[10]! : KF[Math.max(0, i - 1)]!;
+    const a = i === STAGE_INDEX.handover ? KF[STAGE_INDEX.handover]! : KF[Math.max(0, i - 1)]!;
     const b = KF[i]!;
-    const k = i === 0 ? 1 : easeInOut(ramp(f, 0, 0.32));
+    const k = i === 0 ? 1 : easeInOut(ramp(f, 0, i === 9 ? 0.14 : 0.32));
     desiredTarget.set(...a.t).lerp(tmpB.set(...b.t), k);
     desiredPos.set(...a.p).lerp(tmpA.set(...b.p), k);
     if (i === 9) {
       const out = easeInOut(ramp(f, 0.86, 1));
-      desiredTarget.lerp(tmpB.set(...KF[10]!.t), out);
-      desiredPos.lerp(tmpA.set(...KF[10]!.p), out);
+      desiredTarget.lerp(tmpB.set(...KF[STAGE_INDEX.handover]!.t), out);
+      desiredPos.lerp(tmpA.set(...KF[STAGE_INDEX.handover]!.p), out);
     }
     const off = tmpA.copy(desiredPos).sub(desiredTarget);
     let ang = Math.sin(time * 0.12) * 0.025;
@@ -1428,7 +1823,7 @@ export function createBathroomScene(
     if (i === 6) ang += -0.12 + 0.24 * easeInOut(f);
     off.applyAxisAngle(yAxis, ang + pointer.sx * 0.06);
     off.y += pointer.sy * 0.25;
-    const close = i === 6 || i === 9;
+    const close = i === 6 || i === 9 || (i >= STAGE_INDEX.basin && i <= STAGE_INDEX.vent);
     off.multiplyScalar(close ? Math.min(distMul, 1.3) : distMul);
     desiredPos.copy(desiredTarget).add(off);
   };
@@ -1458,10 +1853,7 @@ export function createBathroomScene(
     if (s < 7 && st.corner === null) return s < 6.5 ? "trim" : "jolly";
     return st.corner ?? "jolly";
   };
-  const buttonAt = (s: number): ButtonType => {
-    if (s >= 9 && s < 10 && st.button === null) return s < 9.37 ? "narrow" : s < 9.65 ? "wide" : "round";
-    return st.button ?? "round";
-  };
+  const buttonAt = (s: number): ButtonType => buttonAtStage(s, st.button);
 
   const update = (s: number, dt: number, time: number, finished: boolean) => {
     // 0 preparation: flatness check, grinding, primer
@@ -1505,9 +1897,14 @@ export function createBathroomScene(
       (dustGeo.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
     }
     const rollerPrimer = wipeUpdate(wipes.primer, s, tools.roller);
-    const tb = ramp(s, 0.86, 0.98);
+    const tb = ramp(s, TUB_INSTALL.from, TUB_INSTALL.to);
     tub.visible = tb > 0;
     tub.position.y = (1 - easeOut(tb)) * 0.9;
+    const enclosureProgress = ramp(s, TUB_ENCLOSURE.from, TUB_ENCLOSURE.to);
+    tubEnclosure.visible = enclosureProgress > 0;
+    tubEnclosure.scale.y = Math.max(0.001, easeOut(enclosureProgress));
+    sf("tubFront").group.visible = s >= TUB_ENCLOSURE.to;
+    sf("tubSide").group.visible = s >= TUB_ENCLOSURE.to;
 
     // 1 drain & screed
     const dr = ramp(s, 1.04, 1.28);
@@ -1539,13 +1936,21 @@ export function createBathroomScene(
       else g.obj.scale.setScalar(e);
     }
 
-    // 3 waterproofing: variant A or B
+    // 2 first layer (tapes are pressed into it) · 3 second layer: variant A or B
+    const roll1 = wipeUpdate(wipes.wp1, s, tools.roller);
+    const trowel1 = wipeUpdate(wipes.wp1Floor, s, tools.float);
     const isA = st.waterproof === "A";
     const rollA = wipeUpdate(wipes.wpA, s, isA ? tools.roller : null, isA);
-    const trowelA = wipeUpdate(wipes.wpAFloor, s, isA ? tools.float : null, isA);
+    const trowelA0 = wipeUpdate(wipes.wpAFloor, s, isA ? tools.float : null, isA);
+    const trowelA = trowelA0 || trowel1;
     wipeUpdate(wipes.wpB, s, null, !isA);
-    if (!rollerPrimer && !rollA) tools.roller.visible = false;
-    membraneMat.color.copy(coat1).lerp(coat2, easeInOut(ramp(s, 3.66, 3.95)));
+    const bandRoll = wipeUpdate(wipes.wpBand, s, isA ? null : tools.roller, !isA);
+    for (const g of bandGrows) {
+      const p = isA ? 0 : ramp(s, g.t0, g.t1);
+      g.obj.visible = p > 0;
+      g.obj.scale.set(Math.max(0.001, easeOut(p)), 1, 1);
+    }
+    if (!rollerPrimer && !rollA && !roll1 && !bandRoll) tools.roller.visible = false;
 
     // 4 & 5 tiles (butterfly)
     let activePatch: { t: Tile; p: number } | null = null;
@@ -1577,7 +1982,9 @@ export function createBathroomScene(
     drainInsert.position.y = (1 - easeOut(di)) * 0.3;
 
     // hidden cabinet door: swings open at handover and when its explanation is open
-    const doorWant = Math.max(bell(s, 10.5, 10.95, 0.12), finished && st.focus === 5 ? 1 : 0);
+    const detailState = concealedDetailState(s, st.focus, finished, N + 1);
+    const doorWant = detailState.cabinetOpen ? 1 : 0;
+    cabinetContents.visible = s >= STAGE_INDEX.cabinet;
     st.door += (doorWant - st.door) * Math.min(1, dt * 4);
     if (doorTile && s > 5.9) {
       const r = doorTile.rect;
@@ -1586,7 +1993,33 @@ export function createBathroomScene(
       doorTile.mesh.rotation.set(0, a, 0);
       doorTile.mesh.position.x = r.u1 - (w / 2) * Math.cos(a);
       doorTile.mesh.position.z = ADH + T / 2 + (w / 2) * Math.sin(a);
+      doorTile.patch.visible = false;
+      doorTile.grout.visible = false;
     }
+
+    for (const door of detailDoors) {
+      const { tile, detail } = door;
+      if (s < 5.9) continue;
+      const open = ((detail === N + 1 && detailState.accessoriesOpen) || (finished && st.focus === detail)) ? 1.1 : 0;
+      door.angle += (open - door.angle) * Math.min(1, dt * 4);
+      if (door.tilt) {
+        // brush door hinged at the bottom: the top tips out towards the room
+        const a = door.angle * 0.75;
+        const halfV = (tile.rect.v1 - tile.rect.v0) / 2;
+        tile.mesh.rotation.set(a, 0, 0);
+        tile.mesh.position.y = tile.rect.v0 + halfV * Math.cos(a);
+        tile.mesh.position.z = ADH + T / 2 + halfV * Math.sin(a);
+      } else {
+        tile.mesh.rotation.y = door.angle;
+        const half = (tile.rect.u1 - tile.rect.u0) / 2;
+        tile.mesh.position.x = tile.rect.u1 - half * Math.cos(tile.mesh.rotation.y);
+        tile.mesh.position.z = ADH + T / 2 + half * Math.sin(tile.mesh.rotation.y);
+      }
+      tile.patch.visible = false;
+      tile.grout.visible = false;
+    }
+    const accessoriesVisible = detailDoors.some((door) => door.detail === N + 1 && door.angle > 0.15);
+    brush.visible = accessoriesVisible;
 
     // 6 corner: trim vs Jolly
     const corner = cornerAt(s);
@@ -1594,14 +2027,17 @@ export function createBathroomScene(
     trim.visible = corner === "trim";
     trim.scale.y = Math.max(0.001, s < 6.5 ? easeOut(ct) : 1);
     jolly.visible = corner === "jolly";
+    nicheTrim.visible = corner === "trim";
+    nicheJolly.visible = corner === "jolly";
 
     // 9 flush buttons
     const bv = buttonAt(s);
     (Object.keys(buttonVariants) as ButtonType[]).forEach((k) => (buttonVariants[k].group.visible = k === bv));
     let press = bell(s, 10.72, 10.84, 0.05);
     if (s >= 9 && s < 10) {
-      const w0 = bv === "narrow" ? 9.0 : bv === "wide" ? 9.37 : 9.65;
-      const w1 = bv === "narrow" ? 9.37 : bv === "wide" ? 9.65 : 0.0 + 10;
+      const bi = BUTTON_ORDER.indexOf(bv);
+      const w0 = st.button ? 9.0 : BUTTON_SPLITS[bi]!;
+      const w1 = st.button ? 9.86 : Math.min(9.86, BUTTON_SPLITS[bi + 1]!);
       press = bell(s, w0 + (w1 - w0) * 0.55, w0 + (w1 - w0) * 0.75, 0.03);
     }
     buttonVariants[bv].press.position.z = -press * 0.004;
@@ -1643,24 +2079,51 @@ export function createBathroomScene(
       const e = easeOut(p);
       ap.obj.position.set(ap.base.x + ap.from[0] * (1 - e), ap.base.y + ap.from[1] * (1 - e), ap.base.z + ap.from[2] * (1 - e));
     }
-    glassMat.opacity = 0.2 * easeOut(ramp(s, 10.04, 10.22));
-    stubs.visible = s < 10.1;
+    paper.visible = accessoriesVisible;
+    {
+      const bs = s - STAGE_INDEX.basin;
+      const want = (bs >= 0.1 && bs < 0.4) || (finished && (st.focus === STAGE_INDEX.basin || st.focus === N)) ? 1 : 0;
+      drawerOpen += (want - drawerOpen) * Math.min(1, dt * 3);
+      drawers.forEach((d, i) => { d.position.x = drawerOpen * (i === 0 ? 0.34 : 0.26); });
+      drawerLight.intensity = drawerOpen * 1.6;
+      drawerLedMat.color.copy(ledOff).lerp(ledOn, drawerOpen);
+      const lifting = finished && st.focus === N + 6;
+      drainFocusT = lifting ? Math.min(1, drainFocusT + dt / 2) : 0;
+      // slow, deliberate removal: rise, hold over the open channel, then settle back
+      const lift = lifting
+        ? easeInOut(drainFocusT)
+        : Math.min(easeInOut(ramp(bs, 0.3, 0.62)), 1 - easeInOut(ramp(bs, 0.84, 0.97)));
+      // driven straight from the timeline so the removal always takes the same visible time
+      drainStrip.position.y = lift * 0.24;
+      const aside = lifting ? 0 : Math.max(0, lift - 0.35);
+      drainStrip.position.x = aside * 0.42;
+      drainStrip.rotation.z = -aside * 0.6;
+    }
+    const brushOpen = detailDoors.some((door) => door.tilt && door.angle > 0.05);
+    paperFlap.visible = s >= 12.2 && !brushOpen;
+    (paperFlap.userData["slot"] as THREE.Object3D).visible = s >= 6;
+    decor.visible = detailState.decorationsVisible;
+    nicheLeds.visible = s >= 5.9;
+    glassMat.opacity = 0.2 * easeOut(ramp(s, 14.04, 14.22));
+    stubs.visible = s < 14.1;
 
     // lights & mood (romantic: daylight dims, every lamp, LED and candle glows)
     const m = st.mood;
-    const lights = Math.max(easeInOut(ramp(s, 10.28, 10.6)), m);
+    const lights = Math.max(easeInOut(ramp(s, 10.0, 10.2)), m) * (!finished || st.roomLit ? 1 : 0);
     spotShower.intensity = lights * (9 + m * 3);
     spotTub.intensity = lights * (7 + m * 5);
     spotWc.intensity = lights * (3 + m * 2);
-    const nl = st.nicheLit ? lights : 0;
+    const nicheLevels = nicheLightLevels(st.nicheLit, s >= 5.9);
+    const nl = nicheLevels.shower;
     nicheLight.intensity = nl * (1.6 + m * 1.8);
     ledMat.color.copy(ledOff).lerp(ledOn, nl);
-    wcNicheLight.intensity = lights * (1.4 + m * 1.6);
-    wcLedMat.color.copy(ledOff).lerp(ledOn, lights);
-    key.intensity = 1.75 * (1 - 0.86 * m);
-    fill.intensity = 0.45 * (1 - 0.9 * m);
-    hemi.intensity = 0.25 * (1 - 0.6 * m);
-    scene.environmentIntensity = 0.45 * (1 - 0.72 * m);
+    wcNicheLight.intensity = nicheLevels.wc * (1.4 + m * 1.6);
+    wcLedMat.color.copy(ledOff).lerp(ledOn, nicheLevels.wc);
+    const ambientFactor = finished && !st.roomLit ? 0.12 : 1;
+    key.intensity = 1.75 * (1 - 0.86 * m) * ambientFactor;
+    fill.intensity = 0.45 * (1 - 0.9 * m) * ambientFactor;
+    hemi.intensity = 0.25 * (1 - 0.6 * m) * Math.max(ambientFactor, 0.4);
+    scene.environmentIntensity = 0.45 * (1 - 0.72 * m) * Math.max(ambientFactor, 0.3);
     bg.copy(bgDay).lerp(bgNight, m);
 
     // candles
@@ -1675,8 +2138,10 @@ export function createBathroomScene(
     });
     candleLight.intensity = st.candles * (1.4 + 0.35 * Math.sin(time * 11) + 0.2 * Math.sin(time * 23));
 
-    // water: timeline shower burst at handover plus the interactive toggles
-    const showerAmt = Math.max(bell(s, 10.5, 10.8, 0.04), finished ? st.shower : 0);
+    // water: timeline shower burst at handover plus the interactive toggles;
+    // while the tub is filling, the shower and the basin tap run too
+    const fillOn = finished && bathFillTarget(st.tubTarget > 0, st.bathHovered, finished) > 0 ? 1 : 0;
+    const showerAmt = Math.max(bell(s, 14.5, 14.8, 0.04), finished ? Math.max(st.shower, fillOn) : 0);
     rain.visible = showerAmt > 0.01;
     rainMat.opacity = showerAmt * 0.75;
     puddle.visible = rain.visible;
@@ -1694,7 +2159,12 @@ export function createBathroomScene(
     water.visible = level > 0.005;
     water.position.y = 0.16 + easeOut(level) * 0.32 + Math.sin(time * 1.7) * 0.0012;
     waterMat.opacity = Math.min(0.6, level * 4);
-    const filling = finished && st.tubTarget > 0 && st.tub < 0.995;
+    const filling = bathFillTarget(st.tubTarget > 0, st.bathHovered, finished) > 0 && st.tub < 0.995;
+    container.dataset["bathFilling"] = String(filling);
+    container.dataset["bathHovered"] = String(st.bathHovered);
+    container.dataset["waterLevel"] = st.tub.toFixed(3);
+    container.dataset["roomLit"] = String(st.roomLit);
+    container.dataset["nichesLit"] = String(st.nicheLit);
     spoutStream.visible = filling;
     if (filling) {
       const top = 0.8;
@@ -1702,6 +2172,19 @@ export function createBathroomScene(
       spoutStream.scale.y = top - bottom;
       spoutStream.position.set(2.35, (top + bottom) / 2, 0.19);
     }
+    // basin tap runs while the tub fills; water gathers in the basin
+    st.basin += (fillOn - st.basin) * Math.min(1, dt * 1.2);
+    tapStream.visible = st.basin > 0.02;
+    tapStreamMat.opacity = Math.min(0.6, st.basin * 2);
+    if (tapStream.visible) {
+      const top = 1.018;
+      const bottom = 0.79;
+      tapStream.scale.y = top - bottom;
+      tapStream.position.set(0.487, (top + bottom) / 2, 3.343);
+    }
+    basinWater.visible = st.basin > 0.02;
+    basinWater.position.y = 0.742 + easeOut(Math.min(1, st.basin)) * 0.042;
+    basinWaterMat.opacity = Math.min(0.55, st.basin * 2.2);
   };
 
   /* ---------------------------------------------------------------- labels & hotspots */
@@ -1733,11 +2216,12 @@ export function createBathroomScene(
       if (l.id === "trim" && st.corner !== null) a = s >= 6 && s < 7 && st.corner === "trim" ? 1 : 0;
       if (l.id === "jolly" && st.corner !== null) a = s >= 6 && s < 7 && st.corner === "jolly" ? 1 : 0;
       if (l.id.startsWith("btn-") && st.button !== null) a = s >= 9 && s < 10 && l.id === `btn-${st.button}` ? 1 : 0;
-      if ((l.id === "wpWall" || l.id === "wpFloor") && finished) a = 0;
+      if (l.variant && l.variant !== st.waterproof) a = 0;
+      if (l.id.startsWith("wp") && finished) a = 0;
       place(el, labelOverride[l.id] ?? l.pos, a, w, h);
     }
     hotspotA += ((finished && !freeView ? 1 : 0) - hotspotA) * Math.min(1, dt * 4);
-    for (const hs of HOTSPOTS) {
+    for (const hs of [...HOTSPOTS, ...FINISH_DETAILS.map((d, i) => ({ stage: N + i, pos: [...d.pos] as V3 }))]) {
       const el = hotspotEls.get(hs.stage);
       if (!el) continue;
       const a = st.focus !== null && st.focus !== hs.stage ? hotspotA * 0.35 : hotspotA;
@@ -1784,13 +2268,23 @@ export function createBathroomScene(
     camPos.copy(camera.position);
   };
 
+  const raycaster = new THREE.Raycaster();
+  const pickPointer = new THREE.Vector2();
   const onPointer = (e: PointerEvent) => {
     if (e.pointerType !== "mouse") return;
     const r = container.getBoundingClientRect();
     pointer.x = ((e.clientX - r.left) / r.width) * 2 - 1;
     pointer.y = ((e.clientY - r.top) / r.height) * 2 - 1;
+    if (progress >= 1 && e.target === canvas) {
+      pickPointer.set(pointer.x, -pointer.y);
+      raycaster.setFromCamera(pickPointer, camera);
+      const hits = raycaster.intersectObjects([tub, ...wallTiles.filter(t => t.surf.def.id.startsWith("tub")).map(t => t.mesh)], true);
+      st.bathHovered = hits.length > 0;
+    } else st.bathHovered = false;
   };
+  const onLeave = () => { st.bathHovered = false; };
   container.addEventListener("pointermove", onPointer);
+  container.addEventListener("pointerleave", onLeave);
 
   let last = performance.now();
   const clock = { t: 0 };
@@ -1807,7 +2301,8 @@ export function createBathroomScene(
     const k = Math.min(1, dt * 1.6);
     st.mood += ((finished ? st.moodTarget : 0) - st.mood) * k;
     st.shower += (st.showerTarget - st.shower) * Math.min(1, dt * 3);
-    st.tub = st.tubTarget > st.tub ? Math.min(st.tubTarget, st.tub + dt * 0.12) : Math.max(st.tubTarget, st.tub - dt * 0.25);
+    const target = bathFillTarget(st.tubTarget > 0, st.bathHovered, finished);
+    st.tub = target > st.tub ? Math.min(target, st.tub + dt * 0.12) : Math.max(target, st.tub - dt * 0.25);
     update(s, dt, clock.t, finished);
     pointer.sx += (pointer.x - pointer.sx) * Math.min(1, dt * 3);
     pointer.sy += (pointer.y - pointer.sy) * Math.min(1, dt * 3);
@@ -1841,7 +2336,7 @@ export function createBathroomScene(
   camPos.copy(desiredPos);
   camTarget.copy(desiredTarget);
   cb.onPlayingChange(playing);
-  requestAnimationFrame(() => cb.onReady());
+  requestAnimationFrame(() => { container.dataset["sceneReady"] = "true"; cb.onReady(); });
 
   const api: BathroomScene = {
     play() {
@@ -1888,6 +2383,9 @@ export function createBathroomScene(
     setMood(on) {
       st.moodTarget = on ? 1 : 0;
     },
+    setRoomLight(on) {
+      st.roomLit = on;
+    },
     setShower(on) {
       st.showerTarget = on ? 1 : 0;
     },
@@ -1927,6 +2425,7 @@ export function createBathroomScene(
       io.disconnect();
       ro.disconnect();
       container.removeEventListener("pointermove", onPointer);
+      container.removeEventListener("pointerleave", onLeave);
       disableFree();
       scene.traverse((o) => {
         const m = o as THREE.Mesh;
