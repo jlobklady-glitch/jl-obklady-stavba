@@ -2193,10 +2193,15 @@ export function createBathroomScene(
   const labelOverride: Record<string, V3> = {
     niche: [NI.x0 + nw / 2, shelfY + 0.01, -0.02],
   };
-  const hotspotOverride: Record<number, V3> = { 5: [NI.x0 + nw / 2, shelfY + 0.01, -0.02] };
+  const hotspotOverride: Record<number, V3> = {};
   const proj = new THREE.Vector3();
-  const place = (el: HTMLElement, pos: V3, a: number, w: number, h: number) => {
+  const place = (el: HTMLElement, pos: V3, a: number, w: number, h: number, clamp = false) => {
     proj.set(...pos).project(camera);
+    if (clamp && proj.z <= 1) {
+      const mx = 1 - 24 / w;
+      proj.x = Math.max(-mx, Math.min(mx, proj.x));
+      proj.y = Math.max(-0.9, Math.min(0.9, proj.y));
+    }
     if (a <= 0.001 || proj.z > 1 || Math.abs(proj.x) > 1.05 || Math.abs(proj.y) > 1.05) {
       if (el.style.opacity !== "0") el.style.opacity = "0";
       if (el.style.pointerEvents !== "none") el.style.pointerEvents = "none";
@@ -2225,7 +2230,7 @@ export function createBathroomScene(
       const el = hotspotEls.get(hs.stage);
       if (!el) continue;
       const a = st.focus !== null && st.focus !== hs.stage ? hotspotA * 0.35 : hotspotA;
-      place(el, hotspotOverride[hs.stage] ?? hs.pos, a, w, h);
+      place(el, hotspotOverride[hs.stage] ?? hs.pos, a, w, h, true);
       el.style.pointerEvents = a > 0.3 ? "auto" : "none";
     }
   };
@@ -2240,7 +2245,7 @@ export function createBathroomScene(
     const aspect = width / height;
     camera.aspect = aspect;
     camera.fov = aspect < 0.8 ? 50 : 40;
-    distMul = aspect >= 1.45 ? 1 : Math.pow(1.45 / aspect, aspect < 0.8 ? 0.5 : 0.7);
+    distMul = aspect >= 1.45 ? 1 : Math.pow(1.45 / aspect, aspect < 0.8 ? 0.62 : 0.7);
     const viewShift = aspect < 0.8 ? height * 0.13 : 0;
     const sideShift = width >= 1024 && aspect > 1.1 ? -width * 0.07 : 0;
     if (viewShift || sideShift) camera.setViewOffset(width, height, sideShift, viewShift, width, height);

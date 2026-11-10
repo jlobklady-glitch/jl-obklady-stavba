@@ -43,6 +43,9 @@ import { FINISH_DETAILS } from "./details";
 import { Button } from "@/components/ui/button";
 
 const INSPECTION_POINTS = [...HOTSPOTS, ...FINISH_DETAILS.map((d, i) => ({ stage: STAGE_COUNT + i, pos: [...d.pos] as [number, number, number] }))];
+// Details 0–2 (basin, paper/brush, vent) sit exactly on steps 11, 13 and 14, so they get no second marker; they stay reachable from the list.
+const DUPLICATE_MARKERS = new Set([STAGE_COUNT, STAGE_COUNT + 1, STAGE_COUNT + 2]);
+const MARKERS = INSPECTION_POINTS.filter((h) => !DUPLICATE_MARKERS.has(h.stage));
 
 export interface BathroomViewerHandle {
   seekStage: (index: number) => void;
@@ -444,7 +447,7 @@ export function BathroomViewer({ ref, className }: Props) {
 
       {/* explanation hotspots, shown once the bathroom is finished */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        {INSPECTION_POINTS.map((h) => (
+        {MARKERS.map((h, mi) => (
           <button
             key={h.stage}
             type="button"
@@ -466,7 +469,7 @@ export function BathroomViewer({ ref, className }: Props) {
               )}
             >
               <span className="animate-ping-ring absolute inset-0 rounded-full border border-brass" />
-              {h.stage + 1}
+              {mi + 1}
             </span>
           </button>
         ))}
