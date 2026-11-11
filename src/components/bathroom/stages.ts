@@ -2,6 +2,7 @@
 
 export type GroutType = "cement" | "epoxy";
 export type WaterproofType = "A" | "B";
+export type DrainCoverType = "grate" | "tile";
 export type CornerType = "trim" | "jolly";
 export type ButtonType = "narrow" | "wide" | "round" | "nested";
 export type NicheType = "standard" | "large" | "full";
@@ -115,6 +116,13 @@ export const STAGES: Stage[] = [
     seconds: 8,
   },
   {
+    short: "Věšáky",
+    title: "Skryté věšáky na ručníky",
+    text: "Do obkladu vykroužíme kolečko, které po zatlačení vyjede jako věšák (click-clack). Kolem je jen tenká spára po řezu, žádný kovový rámeček. Dva věšáky jsou u sprchy, jeden vlevo od umyvadla.",
+    details: ["Kolečko z obkladu", "Zatlačit a vyjede", "Jen spára po řezu"],
+    seconds: 8,
+  },
+  {
     short: "Předání",
     title: "Předání klientovi",
     text: "Osadíme sprchu, WC a umyvadlo s dávkovačem ze stejného obkladu. Vana stojí na svém místě už od hydroizolace, papír, štětka, odtah i revize zůstanou nenápadně skryté. Koupelnu předáme s předávacím protokolem.",
@@ -172,11 +180,20 @@ export const STAGE_INDEX = {
   cabinet: 11,
   accessories: 12,
   vent: 13,
-  handover: 14,
+  hooks: 14,
+  handover: 15,
 } as const;
 
 export const TUB_INSTALL = { from: 4.0, to: 4.18 } as const;
 export const TUB_ENCLOSURE = { from: 4.18, to: 4.38 } as const;
+
+export const DRAIN_COVER_INFO: Record<DrainCoverType, { name: string; long: string }> = {
+  grate: { name: "Krycí mřížka", long: "Klasická nerezová mřížka žlabu, snadno vyjímatelná pro čištění." },
+  tile: {
+    name: "Pásek z dlažby",
+    long: "Do rámečku žlabu vložíme pásek ze stejné dlažby. Kresba plynule prochází a podlaha působí ničím nerušeně, voda odtéká nepatrnou spárou po obvodu, bez tvorby louže.",
+  },
+};
 
 export const GROUT_INFO: Record<GroutType, { name: string; details: string[] }> = {
   cement: {
@@ -281,19 +298,20 @@ export interface Hotspot {
 /** Clickable points shown after the build is finished; each explains one step. */
 export const HOTSPOTS: Hotspot[] = [
   { stage: 0, pos: [2.3, 1.7, 0.02] },
-  { stage: 1, pos: [0.8, 0.03, 0.4] },
+  { stage: 1, pos: [0.9, 0.03, 1.2] },
   { stage: 2, pos: [0.02, 1.85, 0.02] },
   { stage: 3, pos: [0.02, 1.4, 0.95] },
   { stage: 4, pos: [1.9, 0.02, 2.0] },
   { stage: 5, pos: [1.3, 0.9, 0.02] },
-  { stage: 6, pos: [0.258, 1.75, 1.732] },
-  { stage: 7, pos: [2.25, 1.1, 0.02] },
-  { stage: 8, pos: [2.2, 0.4, 0.02] },
+  { stage: 6, pos: [0.258, 1.3, 1.732] },
+  { stage: 7, pos: [2.0, 1.2, 0.02] },
+  { stage: 8, pos: [2.2, 0.6, 0.02] },
   { stage: 9, pos: [0.258, 1.02, 2.3] },
   { stage: 10, pos: [0.78, 0.89, 3.0] },
   { stage: 11, pos: [0.26, 2.15, 2.32] },
   { stage: 12, pos: [0.26, 0.3, 1.9] },
-  { stage: 13, pos: [0.018, 2.4, 1.0] },
+  { stage: 13, pos: [0.018, 2.4, 0.6] },
+  { stage: 14, pos: [0.03, 2.0, 1.45] },
 ];
 
 /** Order in which the flush-button shapes are shown during the button step. */

@@ -30,6 +30,7 @@ import {
   STAGE_INDEX,
   WALLS_DETAILS,
   WATERPROOF_INFO,
+  DRAIN_COVER_INFO,
   buttonAtStage,
   progressToStage,
   type ButtonType,
@@ -37,12 +38,13 @@ import {
   type GroutType,
   type NicheType,
   type WaterproofType,
+  type DrainCoverType,
 } from "./stages";
 import type { BathroomScene } from "./scene";
-import { FINISH_DETAILS } from "./details";
+import { DUPLICATE_DETAILS, FINISH_DETAILS } from "./details";
 import { Button } from "@/components/ui/button";
 
-const INSPECTION_POINTS = [...HOTSPOTS, ...FINISH_DETAILS.map((d, i) => ({ stage: STAGE_COUNT + i, pos: [...d.pos] as [number, number, number] }))];
+const INSPECTION_POINTS = [...HOTSPOTS, ...FINISH_DETAILS.map((d, i) => ({ stage: STAGE_COUNT + i, pos: [...d.pos] as [number, number, number] })).filter((_, i) => !DUPLICATE_DETAILS.includes(i))].map((h, i) => ({ ...h, num: i + 1 }));
 
 export interface BathroomViewerHandle {
   seekStage: (index: number) => void;
@@ -146,6 +148,7 @@ export function BathroomViewer({ ref, className }: Props) {
 
   const [grout, setGrout] = useState<GroutType>("cement");
   const [waterproof, setWaterproof] = useState<WaterproofType>("A");
+  const [drainCover, setDrainCover] = useState<DrainCoverType>("tile");
   const [corner, setCorner] = useState<CornerType | null>(null);
   const [button, setButton] = useState<ButtonType | null>(null);
   const [niche, setNiche] = useState<NicheType>("standard");
@@ -157,8 +160,8 @@ export function BathroomViewer({ ref, className }: Props) {
   const [focus, setFocus] = useState<number | null>(null);
 
   // latest option values, re-applied when the scene is rebuilt (niche change)
-  const optsRef = useRef({ grout, waterproof, corner, button, nicheLit, mood, roomLit, shower, tub, focus });
-  optsRef.current = { grout, waterproof, corner, button, nicheLit, mood, roomLit, shower, tub, focus };
+  const optsRef = useRef({ grout, waterproof, drainCover, corner, button, nicheLit, mood, roomLit, shower, tub, focus });
+  optsRef.current = { grout, waterproof, drainCover, corner, button, nicheLit, mood, roomLit, shower, tub, focus };
 
   useEffect(() => {
     let disposed = false;
@@ -213,6 +216,7 @@ export function BathroomViewer({ ref, className }: Props) {
           const o = optsRef.current;
           api.setGrout(o.grout);
           api.setWaterproof(o.waterproof);
+          api.setDrainCover(o.drainCover);
           api.setCorner(o.corner);
           api.setButton(o.button);
           api.setNicheLight(o.nicheLit);
@@ -293,6 +297,7 @@ export function BathroomViewer({ ref, className }: Props) {
 
   const optionsFor = (i: number) => {
     if (i === STAGE_COUNT + 4) return optionsFor(STAGE_INDEX.corner);
+    if (i === STAGE_COUNT + FINISH_DETAILS.length - 1) return optionsFor(STAGE_INDEX.floor);
     if (i === STAGE_INDEX.waterproof)
       return (
         <>
@@ -306,6 +311,21 @@ export function BathroomViewer({ ref, className }: Props) {
             options={(Object.keys(WATERPROOF_INFO) as WaterproofType[]).map((k) => ({ value: k, label: WATERPROOF_INFO[k].name }))}
           />
           <p className="mt-2 text-xs leading-relaxed text-stone md:text-sm">{WATERPROOF_INFO[waterproof].long}</p>
+        </>
+      );
+    if (i === STAGE_INDEX.floor)
+      return (
+        <>
+          <Segmented
+            label="Krytí odtokového žlabu"
+            value={drainCover}
+            onChange={(v) => {
+              setDrainCover(v);
+              sceneRef.current?.setDrainCover(v);
+            }}
+            options={(Object.keys(DRAIN_COVER_INFO) as DrainCoverType[]).map((k) => ({ value: k, label: DRAIN_COVER_INFO[k].name }))}
+          />
+          <p className="mt-2 text-xs leading-relaxed text-stone md:text-sm">{DRAIN_COVER_INFO[drainCover].long}</p>
         </>
       );
     if (i === STAGE_INDEX.walls)
@@ -453,7 +473,7 @@ export function BathroomViewer({ ref, className }: Props) {
               else hotspotRefs.current.delete(h.stage);
             }}
             onClick={() => openFocus(focus === h.stage ? null : h.stage)}
-            aria-label={`Vysvětlit ${h.stage < STAGE_COUNT ? "krok" : "detail"} ${h.stage + 1}: ${(STAGES[h.stage] ?? FINISH_DETAILS[h.stage - STAGE_COUNT])?.title}`}
+            aria-label={`Vysvětlit ${h.stage < STAGE_COUNT ? "krok" : "detail"} ${h.num}: ${(STAGES[h.stage] ?? FINISH_DETAILS[h.stage - STAGE_COUNT])?.title}`}
             className="absolute left-0 top-0 will-change-transform"
             style={{ opacity: 0, pointerEvents: "none" }}
           >
@@ -466,7 +486,7 @@ export function BathroomViewer({ ref, className }: Props) {
               )}
             >
               <span className="animate-ping-ring absolute inset-0 rounded-full border border-brass" />
-              {h.stage + 1}
+              {h.num}
             </span>
           </button>
         ))}
@@ -577,7 +597,7 @@ export function BathroomViewer({ ref, className }: Props) {
               Klikněte na očíslované body v koupelně a vysvětlíme vám, co se pod obkladem skrývá.
             </p>
             <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
-              {FINISH_DETAILS.map((d, i) => (
+              {FINISH_DETAILS.map((d, i) => DUPLICATE_DETAILS.includes(i) ? null : (
                 <Button key={d.title} variant="ghost" type="button" onClick={() => openFocus(STAGE_COUNT + i)} className="h-auto justify-start whitespace-normal rounded-none border-b border-joint px-0 pb-2 text-left text-xs text-stone hover:text-brass">{d.title}</Button>
               ))}
             </div>
@@ -638,7 +658,7 @@ export function BathroomViewer({ ref, className }: Props) {
             <p className="mt-2 text-sm leading-relaxed text-stone md:mt-3 md:text-[15px]">{current.text}</p>
             {optionsFor(stage)}
             {detailsFor(stage).length > 0 && (
-              <ul className="scrollbar-none -mx-1 mt-3 flex gap-2 overflow-x-auto px-1">
+              <ul className="scrollbar-none -mx-1 mt-3 flex gap-2 overflow-x-auto px-1 md:flex-wrap md:overflow-visible">
                 {detailsFor(stage).map((d) => (
                   <li
                     key={d}
