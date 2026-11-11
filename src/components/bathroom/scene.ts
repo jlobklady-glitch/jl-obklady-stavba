@@ -2395,7 +2395,7 @@ export function createBathroomScene(
     const aspect = width / height;
     camera.aspect = aspect;
     camera.fov = aspect < 0.8 ? 50 : 40;
-    distMul = aspect >= 1.45 ? 1 : Math.pow(1.45 / aspect, aspect < 0.8 ? 0.8 : 0.7);
+    distMul = (aspect >= 1.45 ? 1 : Math.pow(1.45 / aspect, aspect < 0.8 ? 0.8 : 0.7)) * (aspect >= 0.8 ? 1.15 : 1);
     const viewShift = aspect < 0.8 ? height * 0.13 : 0;
     const sideShift = width >= 1024 && aspect > 1.1 ? -width * 0.07 : 0;
     if (viewShift || sideShift) camera.setViewOffset(width, height, sideShift, viewShift, width, height);
