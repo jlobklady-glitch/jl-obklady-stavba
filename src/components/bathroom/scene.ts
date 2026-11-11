@@ -1569,7 +1569,48 @@ export function createBathroomScene(
   {
     const DISC = 0.015; // tile disc cut out of the wall
     const PIN = 0.048; // how far the pin travels out of the wall
-    const towelMat2 = std({ color: "#b5a693", roughness: 1, side: THREE.DoubleSide });
+    // soft cream towel: draped cloth with vertical folds and a darker hem at the bottom
+    const towelTex = (() => {
+      const c = document.createElement("canvas");
+      c.width = 128;
+      c.height = 256;
+      const g = c.getContext("2d")!;
+      g.fillStyle = "#e4d7bf";
+      g.fillRect(0, 0, 128, 256);
+      for (let i = 0; i < 9; i++) {
+        const x = 8 + i * 14 + (i % 2) * 3;
+        const gr = g.createLinearGradient(x - 8, 0, x + 8, 0);
+        gr.addColorStop(0, "rgba(120,100,70,0)");
+        gr.addColorStop(0.5, `rgba(120,100,70,${0.1 + (i % 3) * 0.04})`);
+        gr.addColorStop(1, "rgba(120,100,70,0)");
+        g.fillStyle = gr;
+        g.fillRect(x - 8, 0, 16, 256);
+      }
+      g.fillStyle = "rgba(255,255,255,0.18)";
+      for (let y = 0; y < 256; y += 3) g.fillRect(0, y, 128, 1);
+      g.fillStyle = "#cdbd9f";
+      g.fillRect(0, 232, 128, 7);
+      g.fillStyle = "#d8c9ad";
+      g.fillRect(0, 239, 128, 2);
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    })();
+    const towelMat2 = std({ color: "#ffffff", roughness: 1, side: THREE.DoubleSide, map: towelTex });
+    const towelGeo = (len: number, wide: number) => {
+      const g = new THREE.PlaneGeometry(wide, len, 24, 40);
+      const pos = g.attributes.position!;
+      for (let i = 0; i < pos.count; i++) {
+        const u = pos.getX(i) / wide; // -0.5 .. 0.5
+        const t = 0.5 - pos.getY(i) / len; // 0 top .. 1 bottom
+        const taper = 0.22 + 0.78 * Math.min(1, t / 0.4);
+        pos.setX(i, u * wide * taper);
+        pos.setZ(i, Math.sin(u * 15 + t * 2) * 0.011 * (0.25 + 0.75 * Math.min(1, t * 1.6)) * (1 + Math.abs(u)));
+      }
+      g.rotateY(Math.PI / 2);
+      g.computeVertexNormals();
+      return g;
+    };
     const add = (
       surf: "left" | "preFront",
       z: number,
@@ -1605,8 +1646,8 @@ export function createBathroomScene(
       shaft.position.set(face, y, z);
       let towel: THREE.Object3D | null = null;
       if (withTowel) {
-        const tw = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.03, towelLen, towelDeep), towelMat2));
-        tw.position.set(face + 0.03, y - towelLen / 2 - 0.02, z);
+        const tw = shadowed(new THREE.Mesh(towelGeo(towelLen, towelDeep), towelMat2));
+        tw.position.set(face + PIN + 0.012, y - towelLen / 2 - 0.01, z);
         tw.rotation.z = 0.04;
         tw.visible = false;
         towel = tw;
