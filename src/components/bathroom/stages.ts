@@ -89,8 +89,8 @@ export const STAGES: Stage[] = [
   },
   {
     short: "Umyvadlo",
-    title: "Metrové umyvadlo, skříňka a dávkovač z obkladu",
-    text: "Metrové umyvadlo vyrobíme ze stejného velkoformátu. Dno spádujeme ke skrytému odtoku pod vyjímatelným proužkem obkladu. Pod umyvadlem je obložená skříňka se šuplíky, které se při otevření rozsvítí.",
+    title: "Umyvadlo, skříňka a dávkovač z obkladu",
+    text: "Umyvadlo vyrobíme ze stejného velkoformátu na míru dle přání investora. Dno spádujeme ke skrytému odtoku pod vyjímatelným proužkem obkladu. Pod umyvadlem je obložená skříňka se šuplíky, které se při otevření rozsvítí.",
     details: ["Délka 1 m", "Skrytý odtok pod proužkem", "Podsvícené šuplíky", "Dávkovač z obkladu"],
     seconds: 10,
   },

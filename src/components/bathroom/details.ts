@@ -25,7 +25,7 @@ export const DETAIL_DIMENSIONS = {
 } as const;
 
 export const FINISH_DETAILS = [
-  { title: "Metrové umyvadlo se skříňkou", text: "Umyvadlo dlouhé 1 m vyrobíme ze stejného obkladu, s kamenickými rohy a spádem ke skrytému odtoku. Pod ním je obložená skříňka se dvěma šuplíky, které se při otevření samy rozsvítí. Stejná kresba pokračuje i na dávkovači mýdla.", pos: [0.78, 0.89, 3.35], camera: [2.5, 1.5, 4.6], target: [0.5, 0.6, 3.35] },
+  { title: "Umyvadlo z obkladu na míru", text: "Umyvadlo vyrobíme ze stejného obkladu na míru dle přání investora, s kamenickými rohy a spádem ke skrytému odtoku. Pod ním je obložená skříňka se dvěma šuplíky, které se při otevření samy rozsvítí. Stejná kresba pokračuje i na dávkovači mýdla.", pos: [0.78, 0.89, 3.35], camera: [2.5, 1.5, 4.6], target: [0.5, 0.6, 3.35] },
   { title: "Skrytý papír a WC štětka", text: "Napravo od WC je dole skříňka na štětku, přímo nad ní zásobník papíru. Dvířka jsou z obkladu bez úchytek a nepřekážejí umyvadlu.", pos: [0.26, 0.72, 1.9], camera: [1.45, 1.12, 2.75], target: [0.24, 0.64, 1.9] },
   { title: "Skrytý odtah vlhkosti", text: "U sprchy těsně pod stropem je čtverec obkladu 10 × 10 cm. Vzduch odchází centimetrovou mezerou po jeho obvodu, bez viditelné mřížky.", pos: [0.018, 2.4, 0.6], camera: [1.3, 2.4, 1.65], target: [0.01, 2.4, 0.6] },
   { title: "Revizní dvířka pod vanou", text: "Dvířka v čele vany navazují kresbou i spárami na okolní obklad. Umožňují přístup k sifonu bez rozbíjení obkladu.", pos: [2.25, 0.27, 0.82], camera: [3.2, 1.2, 2.4], target: [2.25, 0.28, 0.82] },
